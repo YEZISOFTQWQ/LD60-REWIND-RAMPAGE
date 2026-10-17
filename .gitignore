@@ -1,0 +1,35 @@
+# Unity generated folders
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Bb]uild/
+/[Bb]uilds/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# IDE / local machine files
+/.vs/
+/.vscode/
+/.idea/
+*.csproj
+*.sln
+*.slnx
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+sysinfo.txt
+.DS_Store
+Thumbs.db
+*.log
+
+# Runtime exports are deliberately committed for GitHub Pages.
+!/docs/Build/
+!/docs/Build/**
+!/docs/TemplateData/
+!/docs/TemplateData/**

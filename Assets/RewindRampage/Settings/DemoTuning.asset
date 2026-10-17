@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 17e464ca62c78074f8e650bf863bef07, type: 3}
+  m_Name: DemoTuning
+  m_EditorClassIdentifier: 
+  moveSpeed: 5.5
+  startingHealth: 3
+  hurtInvulnerability: 0.75
+  exitInvulnerability: 0.3
+  playerRadius: 0.27
+  recordDuration: 3
+  sampleInterval: 0.05
+  minimumMovingDuration: 1
+  rewindMultiplier: 5
+  rewindCooldown: 2
+  attackRadius: 0.55
+  arenaHalfSize: {x: 14.6, y: 7.2}
+  roundDuration: 90
+  enemySpeed: 2.5
+  enemyRadius: 0.32
+  maximumEnemies: 35
+  initialSpawnInterval: 1.5
+  finalSpawnInterval: 0.38
+  spawnWarningDuration: 0.5
