@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace RewindRampage
@@ -31,10 +32,10 @@ namespace RewindRampage
             Core = new TimeCoreController(tuning, art, feedback.transform, onCoreHit);
         }
 
-        public void Start()
+        public void Start(IReadOnlyList<Vector2> entryPositions = null)
         {
             Remaining = Duration; Phase = EchoKills = 0;
-            Core.Reset(); spawns.Start(); IsRunning = true;
+            Core.Reset(); spawns.Start(entryPositions); IsRunning = true;
         }
 
         public void Tick(float deltaTime, float playerClock, Vector2 previousPosition, bool playerRewound)

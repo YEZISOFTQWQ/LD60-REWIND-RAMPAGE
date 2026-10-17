@@ -98,7 +98,7 @@ namespace RewindRampage
             for (int i = 0; i < enemies.Count; i++) enemies[i].Tick(deltaTime, player.Position);
         }
 
-        private Vector2 ChooseEdgePosition(Vector2 playerPosition)
+        public Vector2 ChooseEdgePosition(Vector2 playerPosition)
         {
             Vector2 half = tuning.arenaHalfSize - Vector2.one * 0.55f;
             Vector2 candidate = Vector2.zero;

@@ -40,15 +40,18 @@ namespace RewindRampage
         private readonly Transform root;
         private readonly SpriteRenderer body, halo, ring;
         private readonly LineRenderer history, future;
+        private readonly SpriteRenderer doubleOutline;
         private RunRecording recording;
         private int frameCursor;
         private float clipStart, clipEnd, flashRemaining, visualTime;
         private float presentationOpacity = 1f;
         private bool targetLocked;
+        private float targetPulse;
         public Vector2 Position => root.position;
         public bool IsRewinding { get; private set; }
         public bool IsWarning { get; set; }
         public bool IsFrozen { get; set; }
+        public bool Interference { get; set; }
 
         public ReplayGhostController(GameArt art, Transform parent)
         {
@@ -58,6 +61,7 @@ namespace RewindRampage
             halo = ReplayVisuals.Sprite("Replay halo", root, art.glow, 1.8f, 7, ReplayVisuals.Magenta);
             halo.sharedMaterial = art.glowMaterial;
             ring = ReplayVisuals.Sprite("Subject outline", root, art.ring, 1.45f, 8, ReplayVisuals.Magenta);
+            doubleOutline = ReplayVisuals.Sprite("Playback tracking double", root, art.triangle, 0.8f, 8, ReplayVisuals.Magenta);
             history = ReplayVisuals.Line("Past recording", root, art, 0.045f, new Color(0.5f, 0.12f, 0.45f, 0.4f), -1);
             future = ReplayVisuals.Line("Next second - movement preview", root, art, 0.035f, new Color(1f, 0.4f, 0.75f, 0.35f), 1);
             StopPlayback();
@@ -66,8 +70,8 @@ namespace RewindRampage
         public void Initialize(RunRecording source, float start, float end)
         {
             recording = source;
-            flashRemaining = visualTime = 0f;
-            IsWarning = IsFrozen = false;
+            flashRemaining = visualTime = targetPulse = 0f;
+            IsWarning = IsFrozen = Interference = false;
             presentationOpacity = 1f; targetLocked = false;
             root.gameObject.SetActive(true);
             JumpToClip(start, end);
@@ -115,17 +119,22 @@ namespace RewindRampage
         {
             visualTime += deltaTime;
             flashRemaining = Mathf.Max(0f, flashRemaining - deltaTime);
+            targetPulse = Mathf.Max(0f, targetPulse - deltaTime);
             body.color = flashRemaining > 0f ? Color.white : ReplayVisuals.Magenta;
             body.transform.localPosition = new Vector3(Mathf.Sin(visualTime * 47f) * 0.018f, 0f, 0f);
+            doubleOutline.enabled = Interference;
+            doubleOutline.transform.localPosition = new Vector3(0.16f + Mathf.Sin(visualTime * 23f) * 0.08f, -0.04f, 0f);
+            doubleOutline.transform.localRotation = body.transform.localRotation;
+            doubleOutline.color = new Color(1f, 0.5f, 0.55f, 0.2f * presentationOpacity);
             Color color = IsFrozen ? GameArt.Gold : ReplayVisuals.Magenta;
             color.a = IsWarning ? 0.3f + 0.7f * Mathf.Abs(Mathf.Sin(visualTime * 19f)) : 0.65f;
-            ring.color = color;
+            ring.color = Color.Lerp(color, Color.white, targetPulse * 2f);
             color.a = IsRewinding ? 0.5f : 0.25f;
             halo.color = color;
             color = body.color; color.a *= presentationOpacity; body.color = color;
             color = halo.color; color.a *= presentationOpacity; halo.color = color;
             color = ring.color; color.a *= presentationOpacity; ring.color = color;
-            ring.transform.localScale = Vector3.one * (targetLocked ? 1.8f : 1.45f);
+            ring.transform.localScale = Vector3.one * (targetLocked ? 1.8f : 1.45f) * (1f + targetPulse * 0.2f);
             history.startColor = history.endColor = new Color(0.5f, 0.12f, 0.45f, 0.4f * presentationOpacity);
             future.startColor = future.endColor = new Color(1f, 0.4f, 0.75f, 0.35f * presentationOpacity);
         }
@@ -137,6 +146,7 @@ namespace RewindRampage
         }
 
         public void FlashHit() { flashRemaining = 0.2f; }
+        public void HighlightTarget() { targetPulse = 0.5f; }
         public void StopPlayback() { root.gameObject.SetActive(false); IsWarning = false; }
         public void ClearRecording() { StopPlayback(); recording = null; frameCursor = 0; }
     }

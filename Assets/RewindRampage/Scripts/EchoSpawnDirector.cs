@@ -47,10 +47,11 @@ namespace RewindRampage
             return reserved < phase.AttackSlots;
         }
 
-        public void Start()
+        public void Start(IReadOnlyList<Vector2> entryPositions = null)
         {
             Stop(); firstTick = 0; phase = EchoPhaseSettings.ForPhase(0);
-            for (int i = 0; i < phase.Population; i++) SpawnOne();
+            for (int i = 0; i < phase.Population; i++)
+                SpawnOne(entryPositions != null && i < entryPositions.Count ? (Vector2?)entryPositions[i] : null);
             spawnWait = tuning.archiveSpawnInterval;
         }
 
@@ -77,12 +78,12 @@ namespace RewindRampage
             }
         }
 
-        private void SpawnOne()
+        private void SpawnOne(Vector2? entryPosition = null)
         {
             foreach (EchoAIController echo in echoes)
             {
                 if (echo.IsAlive) continue;
-                echo.Spawn(SafeSpawnPoint(), phase);
+                echo.Spawn(entryPosition.HasValue ? tuning.ClampToArena(entryPosition.Value, tuning.archiveEchoRadius) : SafeSpawnPoint(), phase);
                 break;
             }
         }

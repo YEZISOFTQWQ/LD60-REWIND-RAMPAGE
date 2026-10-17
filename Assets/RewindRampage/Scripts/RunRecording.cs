@@ -71,6 +71,13 @@ namespace RewindRampage
             ActionStartTimes = new ReadOnlyDictionary<int, float>(actionStarts);
         }
 
+        public Vector2 SamplePosition(float time)
+        {
+            int index = FindFrame(time);
+            ReplayFrame a = Frames[index], b = Frames[Mathf.Min(index + 1, Frames.Count - 1)];
+            return Vector2.Lerp(a.Position, b.Position, Mathf.InverseLerp(a.Time, b.Time, time));
+        }
+
         public int FindFrame(float time)
         {
             int low = 0, high = Frames.Count - 1;

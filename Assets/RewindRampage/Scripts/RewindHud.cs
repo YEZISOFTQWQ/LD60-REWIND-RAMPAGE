@@ -131,7 +131,7 @@ namespace RewindRampage
             switch (game.State)
             {
                 case SessionState.Title:
-                    view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4.5";
+                    view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.5.0";
                     view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
                     view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
                     view.menuInstructions.text = TitleInstructions;
@@ -161,12 +161,13 @@ namespace RewindRampage
                     }
                     if (game.InDuel)
                     {
-                        view.menuTag.text = game.Survived ? "ACT II COMPLETE / PAST RECORD ERASED" : "TEMPORAL CONFLICT UNRESOLVED";
-                        view.menuTitle.text = game.Survived ? "PAST RECORD\n<color=#FFC242>ERASED</color>" : "TEMPORAL\n<color=#FF4864>CONFLICT</color>";
-                        view.menuLead.text = game.Survived ? "THE TAPE IS EMPTY. THE SIGNAL REMAINS." : "CURRENT INSTANCE REJECTED";
+                        view.menuTag.text = game.Survived ? "ACT II COMPLETE / PAST RECORD ERASED" : "ACT II / OPERATION FAILED";
+                        view.menuTitle.text = game.Survived ? "PAST RECORD\n<color=#FFC242>ERASED</color>" : "OPERATION\n<color=#FF4864>FAILED</color>";
+                        view.menuLead.text = game.Survived ? "THE TAPE IS EMPTY. THE SIGNAL REMAINS." : "OPERATION FAILED.";
                         view.menuInstructions.text = game.Survived
                             ? "Your past self dissolves into magnetic noise.\nA final archive is waiting beyond the tape.\nEnter ACT III to face the remaining echoes."
-                            : "Your recorded self survived the paradox.\nRetry Duel uses the same recording.\nNew Recording starts again from ACT I.";
+                            : game.Player.Health <= 0 ? "> OPERATOR SIGNAL LOST.\n> ERASURE INCOMPLETE.\nRetry uses the same final 30-second recording."
+                            : "> PLAYBACK COMPLETE.\n> TARGET INSTANCE REMAINS.\n> ERASURE WINDOW EXPIRED.";
                         view.menuStats.SetText("DUEL {0:1}s / PAST SELF HP {1} / ACT I SCORE {2:000000}", game.Duel.DuelTime, game.Duel.Boss.Health, game.Score);
                         view.primaryLabel.text = game.Survived ? "ENTER ACT III  >  [ SPACE ]" : "RETRY DUEL  >  [ SPACE ]";
                         break;
@@ -217,7 +218,7 @@ namespace RewindRampage
             bool rewinding = game.Rewind.IsRewinding;
             bool ready = game.Rewind.IsReady;
             bool cooling = game.Rewind.CooldownRemaining > 0f;
-            string mode = game.State == SessionState.Paused ? "II PAUSE" : rewinding ? game.InDuel ? "<< HOLD" : "<< REW" : game.InArchive ? "ARCHIVE" : game.InDuel ? "PLAYBACK" : "REC";
+            string mode = game.State == SessionState.Paused ? "II PAUSE" : rewinding ? game.InDuel ? "<< HOLD" : "<< REW" : game.InArchive ? "ERASE" : game.InDuel ? game.Act2Story.TapeStatus : "REC";
             if (previousMode != mode) { view.recordState.text = mode; previousMode = mode; }
             view.recordState.color = rewinding ? GameArt.Gold : GameArt.Cyan;
             Color dotColor = rewinding ? GameArt.Gold : GameArt.Red;
@@ -254,7 +255,7 @@ namespace RewindRampage
             if (reconstructingTape) view.tapeTime.SetText("<< CAPTURE {0:1}s / 30.0s", 30f * tapeFraction);
 
             float visualDelta = game.State == SessionState.Playing ? deltaTime : 0f;
-            float reelSpeed = reversingTape ? -1800f : 90f;
+            float reelSpeed = game.InDuel && game.Act2Story.IsEnding ? 0f : reversingTape ? -1800f : 90f;
             for (int i = 0; i < view.reels.Length; i++) view.reels[i].Rotate(0f, 0f, reelSpeed * visualDelta);
             TickRewindPresentation(visualDelta, reversingTape);
 
@@ -264,7 +265,8 @@ namespace RewindRampage
                 lastPhase = phase;
                 view.phase.text = new[] { "ACT I / RECORD / OBSERVATION", "ACT I / INCREASING PRESSURE", "ACT I / FINAL RECORDING", "ACT I / BUFFER SATURATION" }[phase];
             }
-            if (game.InDuel) view.phase.text = "ACT II / PLAYBACK / FINAL 30 SECONDS";
+            if (game.InDuel) view.phase.text = game.Act2Story.IsEnding ? "ACT II / IDENTITY VERIFICATION" : game.Duel.DuelTime < 10f
+                ? "ACT II / REWIND / PLAYBACK" : game.Duel.DuelTime < 20f ? "ACT II / SOURCE INTERFERENCE" : "ACT II / ERASURE WINDOW";
             if (game.InArchive) view.phase.text = ArchivePhases[game.Archive.Phase];
 
             string hint = game.InArchive ? rewinding ? "ECHOES FROZEN / THE ARCHIVE CLOCK IS STILL RUNNING." : game.Archive.Core.IsDestroyed
@@ -272,7 +274,7 @@ namespace RewindRampage
                 ? "DODGE LOCKED RED PATHS. THE TIME CORE APPEARS AT 00:30."
                 : "THREE DISTINCT REWINDS TO BREAK THE CORE. THEN SURVIVE UNTIL 00:00."
                 : game.InDuel ? rewinding ? "PAST SELF FROZEN / ONE PARADOX HIT PER REWIND." :
-                "ERASE YOUR PAST / RED DASHES WARN OF ATTACKS. THE FAINT PINK LINE SHOWS ITS NEXT SECOND."
+                "ERASE YOUR PAST / RED SHOTS AIM AT THE REPLAY. DODGE THEIR FIXED PATHS."
                 : rewinding ? "REWIND / ENEMIES FROZEN. YOU ARE INVULNERABLE." : game.Elapsed < 5f
                 ? "WASD TO RECORD A PATH. LURE THE RED CHASERS BEHIND YOU." : game.Elapsed < 12f && game.RewindCount == 0
                 ? "SPACE TO REWIND AND ATTACK. THE BLUE TRAIL CANNOT HURT ENEMIES." : cooling
@@ -328,20 +330,25 @@ namespace RewindRampage
             bool act1Clock = (!game.InDuel && !game.InArchive) || (reconstructing && game.Duel.TransitionElapsed < 6f);
             float time = game.InArchive ? game.Archive.Remaining : game.InDuel ? game.Duel.DuelTime : game.Elapsed;
             if (reconstructing) time = game.Duel.TransitionElapsed < 6f ? game.Tuning.roundDuration : 0f;
+            bool ending = game.InDuel && game.Act2Story.IsEnding;
+            float endingTime = ending ? game.Act2Story.EndingElapsed : 0f;
+            if (endingTime >= 9.5f) time = Act3Director.Duration;
             float alarm = act1Clock ? Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((time - 60f) / 1.1f)) : 1f;
             float milliseconds = act1Clock ? alarm : 1f;
             clockBlinkTime += deltaTime;
             float pulse = 0.5f + 0.5f * Mathf.Sin(clockBlinkTime * Mathf.PI * 3f);
+            if (game.InDuel && !ending && game.Duel.DuelTime >= 25f) pulse = 0.5f + 0.5f * Mathf.Sin(clockBlinkTime * Mathf.PI * 6f);
             if (game.State == SessionState.Title) clockVisibility = 0f;
             else clockVisibility = Mathf.MoveTowards(clockVisibility, game.StoryBooting ? 0f : 1f, deltaTime * 3f);
             bool reverse = game.Rewind.IsRewinding || (reconstructing && game.Duel.TransitionElapsed >= 2f && game.Duel.TransitionElapsed < 5f);
-            bool hold = game.State == SessionState.Paused || game.StoryBooting || (game.InDuel && game.Duel.IsTransition && !reverse);
+            bool hold = game.State == SessionState.Paused || game.StoryBooting || ending || (game.InDuel && game.Duel.IsTransition && !reverse);
             bool active = game.State == SessionState.Playing || game.State == SessionState.Paused;
             ClockLamps lamps = active ? reverse ? ClockLamps.Rew : game.Act == GameAct.Rec ? ClockLamps.Rec : ClockLamps.None : ClockLamps.None;
             if (game.State == SessionState.Playing && !reverse && !hold) lamps |= ClockLamps.Play;
             if (hold) lamps |= ClockLamps.Pause;
             bool locked = game.InArchive && game.Archive.Core.State != TimeCoreState.Dormant;
-            view.arenaClock.Display(time, alarm, milliseconds, lamps, locked, clockVisibility, pulse);
+            float transitionOpacity = endingTime < 9f ? 1f : endingTime < 9.5f ? 1f - (endingTime - 9f) * 2f : (endingTime - 9.5f) * 2f;
+            view.arenaClock.Display(time, alarm, milliseconds, lamps, locked, clockVisibility * transitionOpacity, pulse);
         }
 
         private void TickRewindPresentation(float deltaTime, bool reversing)
@@ -367,32 +374,43 @@ namespace RewindRampage
 
         private void TickDuelPresentation()
         {
-            bool visible = game.InDuel && game.State == SessionState.Playing && game.Duel.IsTransition;
+            bool ending = game.InDuel && game.Act2Story.IsEnding;
+            bool visible = game.InDuel && game.State == SessionState.Playing && (game.Duel.IsTransition || ending);
             view.duelOverlay.SetActive(visible);
             view.scanlines.color = game.InDuel || game.InArchive ? new Color(1f, 1f, 1f, 0.35f) : Color.white;
             if (!visible)
             {
-                if (game.InDuel && !game.Duel.IsTransition) SetStoryEffects(false, 0f, 0f);
                 return;
             }
+            if (ending)
+            {
+                view.duelTitle.text = game.Act2Story.EndingTitle;
+                view.duelTitle.color = game.Act2Story.EndingElapsed >= 3.4f ? GameArt.Red : GameArt.White;
+                view.duelDetail.text = game.Act2Story.EndingDetail;
+                view.duelTapeTime.text = game.Act2Story.EndingElapsed < 4f ? "PLAYBACK TERMINATED" : "ERASE / ARCHIVE TAPE";
+                view.duelBackdrop.color = new Color(0.008f, 0.008f, 0.02f, 0.16f);
+                view.trackingBar.rectTransform.anchoredPosition = new Vector2(0f, Mathf.PingPong(uiTime * 1300f, 1000f) - 500f);
+                return;
+            }
+            view.duelTitle.color = GameArt.White;
             GhostDuelState state = game.Duel.State;
             float time = game.Duel.TransitionElapsed;
-            view.duelTitle.text = state != GhostDuelState.TransitionIn ? "DUPLICATE SUBJECT DETECTED" : time < 1f ? "RECORDING COMPLETE."
-                : time < 6f ? string.Empty : "ELIMINATE THE PREVIOUS INSTANCE.";
-            view.duelDetail.text = state != GhostDuelState.TransitionIn ? "ERASE YOUR PAST" : time < 1f ? string.Empty : time < 2f
+            view.duelTitle.text = state != GhostDuelState.TransitionIn ? "ELIMINATE THE PREVIOUS INSTANCE." : time < 1f ? "RECORDING COMPLETE."
+                : time < 6.8f ? string.Empty : "ELIMINATE THE PREVIOUS INSTANCE.";
+            view.duelDetail.text = state != GhostDuelState.TransitionIn ? "> RECORDING LOADED.\n> PLAYBACK READY.\n> DUPLICATE INSTANCE DETECTED." : time < 1f ? string.Empty : time < 2f
                 ? "> TEMPORAL DATA SECURED.\n> RECONSTRUCTING SUBJECT..." : time < 5f
                 ? "> REWINDING SUBJECT DATA...\n> T-30.00 SEC" : time < 6f
-                ? "> OPERATOR INSTANCE CREATED.\n> DUPLICATE IDENTITY DETECTED." : "TARGET ACQUIRED / PLAYBACK STANDING BY";
+                ? "> OPERATOR INSTANCE CREATED.\n> DUPLICATE IDENTITY DETECTED." : "> RECORDING LOADED.\n> PLAYBACK READY.\n> DUPLICATE INSTANCE DETECTED.";
             float tapeTime = state == GhostDuelState.TransitionIn ? Mathf.Lerp(game.Duel.Recording.Duration,
                 game.Duel.ReplayStart, game.Duel.TransitionProgress) : game.Duel.ReplayTime;
             int seconds = Mathf.FloorToInt(tapeTime);
-            view.duelTapeTime.text = (seconds / 60).ToString("00") + ":" + (seconds % 60).ToString("00");
+            view.duelTapeTime.text = state != GhostDuelState.TransitionIn || time >= 6f ? "PLAY / 00:00" : (seconds / 60).ToString("00") + ":" + (seconds % 60).ToString("00");
             float black = state == GhostDuelState.Preparing ? 0.4f : time >= 2f && time < 6f ? 0.03f : 0.2f;
             view.duelBackdrop.color = new Color(0.008f, 0.008f, 0.02f, black);
             view.trackingBar.rectTransform.anchoredPosition = new Vector2(0f, Mathf.PingPong(uiTime * 1300f, 1000f) - 500f);
             if (state == GhostDuelState.TransitionIn)
             {
-                SetStoryEffects(true, time >= 6f && time < 6.3f ? 0.3f : 0f, time >= 6f && time < 6.2f ? 0.2f : 0f);
+                SetStoryEffects(time < 6f, time >= 6f && time < 6.3f ? 0.3f : 0f, time >= 6f && time < 6.2f ? 0.2f : 0f);
                 view.storyCapture.text = time < 6f ? "REC / RECORDING COMPLETE" : "PLAYBACK / FINAL 30 SECONDS";
                 if (time >= 5f && time < 5.2f) view.flash.color = new Color(1f, 1f, 1f, (5.2f - time) * 3.5f);
             }
@@ -478,7 +496,7 @@ namespace RewindRampage
 
         public void SetEnglishPreview()
         {
-            view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4.5";
+            view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.5.0";
             view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
             view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
             view.menuInstructions.text = TitleInstructions;
@@ -494,7 +512,7 @@ namespace RewindRampage
             view.godModeLabel.text = "F2 / GOD MODE OFF";
             ClearStoryPresentation();
             view.notice.text = view.bannerTitle.text = view.bannerDetail.text = view.chainLabel.text = string.Empty;
-            view.nodeStatus.text = "REC / PLAYBACK / THE ARCHIVE / DEMO v0.4.5";
+            view.nodeStatus.text = "REC / PLAYBACK / THE ARCHIVE / DEMO v0.5.0";
         }
 
         public void SetArchivePreview()

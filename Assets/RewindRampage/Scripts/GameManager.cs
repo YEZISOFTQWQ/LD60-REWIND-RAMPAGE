@@ -26,9 +26,15 @@ namespace RewindRampage
         private GhostDuelManager duel;
         private Act3Director archive;
         private Act1StoryDirector story;
+        private Act2StoryDirector act2Story;
+        private GameTuning runtimeTuning;
+        private Vector2 originalArenaHalfSize;
+        private float arenaScale = 1f;
+        private readonly Vector2[] archiveEntryPositions = new Vector2[6];
         private int lastWidth;
         private int lastHeight;
         private Vector2 movementStart;
+        private Vector2 playbackEntryPosition;
 
         public SessionState State { get; private set; }
         public GameAct Act { get; private set; }
@@ -36,6 +42,7 @@ namespace RewindRampage
         public bool InArchive => Act == GameAct.Archive;
         public Act3Director Archive => archive;
         public GhostDuelManager Duel => duel;
+        public Act2StoryDirector Act2Story => act2Story;
         public GameTuning Tuning => tuning;
         public PlayerController Player => player;
         public TrailRecorder Recorder => recorder;
@@ -74,6 +81,9 @@ namespace RewindRampage
         private void Awake()
         {
             Application.targetFrameRate = 120;
+            // Story expansion is session state, never a mutation of the authored tuning asset.
+            runtimeTuning = Instantiate(tuning); tuning = runtimeTuning;
+            originalArenaHalfSize = tuning.arenaHalfSize;
             FitCamera();
             feedback.Initialize(art, arenaCamera);
             player.Initialize(tuning);
@@ -89,7 +99,7 @@ namespace RewindRampage
             rewind.PositionObserved += (position, time, rewinding) => runRecorder.RecordFrame(position, time, rewinding, true);
             duel = new GhostDuelManager(tuning, art, player, feedback, PrepareDuelPlayer,
                 () => hud.ShowBurst("PARADOX HIT", "THE PAST IS COMING APART", GameArt.Gold, 1.2f),
-                () => hud.ShowNotice("HISTORICAL ATTACK HIT / WATCH THE RED WARNINGS."), OnDuelFinished);
+                () => hud.ShowNotice("HISTORICAL ATTACK HIT / WATCH THE RED WARNINGS."), OnDuelFinished, spawner.ChooseEdgePosition);
             damage.SetBossTarget(duel.Boss);
             archive = new Act3Director(tuning, art, player, feedback, damage.RegisterArchiveKill,
                 OnArchivePhaseChanged, OnArchiveCoreHit,
@@ -101,6 +111,7 @@ namespace RewindRampage
             State = SessionState.Title;
             hud.Initialize(this);
             story = new Act1StoryDirector(tuning, art, player, hud, feedback, storyArena);
+            act2Story = new Act2StoryDirector(tuning, art, player, duel, hud, storyArena, feedback.transform, SetArenaScale);
             hud.ShowState();
             if (initialAct == GameAct.Archive) StartArchive();
         }
@@ -121,6 +132,7 @@ namespace RewindRampage
             feedback.Tick(effectDelta);
             ghostNodes.Tick(effectDelta, intersections.Nodes);
             archive.TickVisual(effectDelta);
+            act2Story.Present(State == SessionState.Playing ? Time.deltaTime : 0f);
             hud.Tick(Time.unscaledDeltaTime);
             story.Present(State == SessionState.Playing ? Time.deltaTime : 0f, Elapsed, State == SessionState.Playing);
         }
@@ -217,12 +229,19 @@ namespace RewindRampage
             player.UpdateVisual(Elapsed, rewind.IsRewinding, rewind.CooldownFraction, rewind.IsReady);
         }
 
-        public void StartArchive()
+        public void StartArchive() { StartArchive(false); }
+
+        private void StartArchive(bool fromStory)
         {
+            Vector2 entryPosition = player.Position;
+            if (fromStory) act2Story.CopyArchivePositions(archiveEntryPositions);
+            act2Story.Stop();
             story.Stop();
             duel.Reset(); runRecorder.ClearRecording(); archive.Reset();
             feedback.ResetFeedback(); rewind.Reset(); spawner.ResetEnemies();
             player.ResetPlayer(tuning.archivePlayerHealth);
+            SetArenaScale(Act2StoryDirector.ArchiveScale);
+            if (fromStory) player.SetPosition(entryPosition);
             Act = GameAct.Archive;
             Elapsed = 0f;
             Score = TotalKills = BestRewindKills = BestCombo = RewindCount = 0;
@@ -230,7 +249,7 @@ namespace RewindRampage
             Survived = false;
             intersections.IgnoreUnlockDelay = true;
             recorder.Clear(player.Position, Elapsed);
-            archive.Start();
+            archive.Start(fromStory ? archiveEntryPositions : null);
             State = SessionState.Playing;
             feedback.SetPaused(false); feedback.PlayStart();
             hud.ShowState();
@@ -265,12 +284,14 @@ namespace RewindRampage
 
         private void BeginPlayback()
         {
+            playbackEntryPosition = player.Position;
             RunRecording recording = runRecorder.StopRecording(player.Position, Elapsed, rewind.IsRewinding);
             rewind.Reset();
             story.Stop(true);
             spawner.SetFrozenVisuals(true);
             Act = GameAct.Playback;
             duel.StartDuel(recording);
+            act2Story.Begin();
             SaveBestScore();
             hud.ShowState();
         }
@@ -282,6 +303,7 @@ namespace RewindRampage
             rewind.Reset();
             spawner.ResetEnemies();
             player.ResetPlayer();
+            player.SetPosition(playbackEntryPosition);
             Elapsed = 0f;
             intersections.IgnoreUnlockDelay = true;
             recorder.Clear(player.Position, Elapsed);
@@ -289,6 +311,11 @@ namespace RewindRampage
 
         private void TickDuel(float deltaTime)
         {
+            if (act2Story.IsEnding)
+            {
+                if (act2Story.TickEnding(deltaTime)) StartArchive(true);
+                return;
+            }
             if (duel.IsTransition)
             {
                 duel.TickTransition(deltaTime);
@@ -324,6 +351,7 @@ namespace RewindRampage
             duel.SetFrozen(freezeReplay, deltaTime);
             if (!freezeReplay) duel.Advance(deltaTime, Elapsed, previousPosition);
             else duel.ResolveOutcome();
+            act2Story.Observe();
             feedback.DrawHistory(recorder, rewind.IsRewinding);
             player.UpdateVisual(Elapsed, rewind.IsRewinding, rewind.CooldownFraction, rewind.IsReady);
         }
@@ -394,6 +422,7 @@ namespace RewindRampage
 
         public void StartRun()
         {
+            act2Story.Stop(); SetArenaScale(1f);
             archive.Reset();
             duel.Reset();
             runRecorder.ClearRecording();
@@ -436,18 +465,28 @@ namespace RewindRampage
         {
             if (duel.Recording == null) return;
             story.Stop();
+            act2Story.Stop(); SetArenaScale(1f);
             Survived = false;
             State = SessionState.Playing;
             feedback.SetPaused(false);
             duel.StartDuel(duel.Recording, false);
+            act2Story.Begin();
             hud.ShowState();
         }
 
         private void OnDuelFinished(bool won)
         {
             Survived = won;
-            State = SessionState.Results;
             rewind.Reset();
+            if (won)
+            {
+                act2Story.BeginEnding();
+                SaveBestScore();
+                return;
+            }
+            act2Story.Stop();
+            State = SessionState.Results;
+            feedback.PlayEnd(false);
             SaveBestScore();
             hud.ShowState();
         }
@@ -486,12 +525,20 @@ namespace RewindRampage
             }
         }
 
+        private void SetArenaScale(float scale)
+        {
+            if (Mathf.Abs(scale - arenaScale) < 0.00001f) return;
+            arenaScale = scale; tuning.arenaHalfSize = originalArenaHalfSize * scale;
+            act2Story.ApplyArenaScale(scale);
+            FitCamera();
+        }
+
         private void FitCamera()
         {
             lastWidth = Screen.width;
             lastHeight = Screen.height;
             float aspect = Mathf.Max(0.2f, (float)lastWidth / Mathf.Max(1, lastHeight));
-            arenaCamera.orthographicSize = Mathf.Max(10.2f, (tuning.arenaHalfSize.x + 1.3f) / aspect);
+            arenaCamera.orthographicSize = Mathf.Max(tuning.arenaHalfSize.y + 3f, (tuning.arenaHalfSize.x + 1.3f) / aspect);
         }
 
         private void OnApplicationFocus(bool focused)
@@ -505,6 +552,7 @@ namespace RewindRampage
             intersections?.Dispose();
             duel?.Dispose();
             archive?.Dispose();
+            if (runtimeTuning != null) Destroy(runtimeTuning);
         }
     }
 }

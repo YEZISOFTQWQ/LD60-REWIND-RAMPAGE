@@ -63,6 +63,7 @@ namespace RewindRampage
         }
 
         public void SetPosition(Vector2 position) { transform.position = position; }
+        public void SetPresentationGlitch(float offset) { body.transform.localPosition = new Vector3(offset, 0f, 0f); }
         public void Protect(float time, float duration) { invulnerableUntil = Mathf.Max(invulnerableUntil, time + duration); }
 
         public bool TakeDamage(float time)
