@@ -28,8 +28,21 @@ namespace RewindRampage
             public float Remaining;
         }
 
+        private sealed class Shockwave
+        {
+            public SpriteRenderer Ring;
+            public SpriteRenderer Glow;
+            public float Delay;
+            public float Remaining;
+            public float Radius;
+            public bool Started;
+            public DamageSource Source;
+            public Color Color;
+        }
+
         private readonly Fragment[] fragments = new Fragment[160];
         private readonly Popup[] popups = new Popup[20];
+        private readonly Shockwave[] shockwaves = new Shockwave[12];
         private readonly List<AudioClip> generatedClips = new List<AudioClip>(8);
         private GameArt art;
         private Camera arenaCamera;
@@ -39,14 +52,19 @@ namespace RewindRampage
         private AudioSource effectsSource;
         private AudioSource rewindSource;
         private AudioSource ambienceSource;
+        private AudioSource burstSource;
         private AudioClip killClip;
         private AudioClip hurtClip;
         private AudioClip deniedClip;
         private AudioClip startClip;
         private AudioClip successClip;
         private AudioClip endClip;
+        private AudioClip spliceClip;
+        private AudioClip explosionClip;
         private int fragmentCursor;
         private int popupCursor;
+        private int waveCursor;
+        private float waveAudioCooldown;
         private float attackFade;
         private float shake;
         private bool attacking;
@@ -106,16 +124,39 @@ namespace RewindRampage
             effectsSource = CreateSource(false, 0.55f);
             rewindSource = CreateSource(true, 0.38f);
             ambienceSource = CreateSource(true, 0.08f);
+            burstSource = CreateSource(false, 0.6f);
             killClip = Synth("Signal hit", 0.16f, 650f, 180f, 0.16f);
             hurtClip = Synth("Signal damaged", 0.3f, 150f, 42f, 0.45f);
             deniedClip = Synth("Tape unavailable", 0.075f, 110f, 95f, 0.08f);
             startClip = Synth("Tape engaged", 0.27f, 230f, 720f, 0.04f);
             successClip = Synth("Tape completed", 0.6f, 330f, 880f, 0.03f);
             endClip = Synth("Signal lost", 0.55f, 270f, 40f, 0.24f);
+            spliceClip = Synth("Double exposure splice", 0.26f, 940f, 180f, 0.18f);
+            explosionClip = Synth("Volatile signal burst", 0.31f, 260f, 45f, 0.64f);
             rewindSource.clip = Synth("Tape motor rewind", 0.6f, 1200f, 160f, 0.52f);
             ambienceSource.clip = MakeHum();
             ambienceSource.Play();
+            Transform waveRoot = new GameObject("Pooled shockwaves").transform;
+            waveRoot.SetParent(transform, false);
+            for (int i = 0; i < shockwaves.Length; i++)
+            {
+                SpriteRenderer ring = CreateWaveSprite("Shockwave ring " + i, waveRoot, art.ring, 16, false);
+                SpriteRenderer glow = CreateWaveSprite("Shockwave glow " + i, waveRoot, art.glow, 14, true);
+                shockwaves[i] = new Shockwave { Ring = ring, Glow = glow };
+            }
             ResetFeedback();
+        }
+
+        private SpriteRenderer CreateWaveSprite(string name, Transform parent, Sprite sprite, int order, bool additive)
+        {
+            GameObject item = new GameObject(name);
+            item.transform.SetParent(parent, false);
+            SpriteRenderer renderer = item.AddComponent<SpriteRenderer>();
+            renderer.sprite = sprite;
+            renderer.sortingOrder = order;
+            if (additive) renderer.sharedMaterial = art.glowMaterial;
+            renderer.enabled = false;
+            return renderer;
         }
 
         public void DrawHistory(TrailRecorder recorder, bool rewinding)
@@ -185,6 +226,8 @@ namespace RewindRampage
             popup.Remaining = 0.85f;
             popup.Text.transform.position = (Vector3)(position + Vector2.up * 0.55f);
             popup.Text.SetText("+{0}", reward);
+            popup.Text.fontSize = 3.6f;
+            popup.Text.color = GameArt.Gold;
             popup.Text.gameObject.SetActive(true);
             effectsSource.pitch = Mathf.Min(1.8f, 0.95f + combo * 0.09f);
             effectsSource.PlayOneShot(killClip, 0.7f);
@@ -207,6 +250,76 @@ namespace RewindRampage
             effectsSource.PlayOneShot(survived ? successClip : endClip, 0.75f);
         }
 
+        public void NodeCreated(Vector2 position)
+        {
+            Burst(position, GameArt.Gold, 7, 1.8f);
+            ShowWorldLabel(position + Vector2.up * 0.5f, "DOUBLE EXPOSURE", GameArt.Gold);
+            effectsSource.pitch = 1.3f;
+            effectsSource.PlayOneShot(startClip, 0.18f);
+        }
+
+        private void ShowWorldLabel(Vector2 position, string text, Color color)
+        {
+            Popup popup = popups[popupCursor++ % popups.Length];
+            popup.Remaining = 0.95f;
+            popup.Text.transform.position = position;
+            popup.Text.fontSize = 2.3f;
+            popup.Text.color = color;
+            popup.Text.text = text;
+            popup.Text.gameObject.SetActive(true);
+        }
+
+        // Visual playback is delayed slightly for a readable cascade; damage is already resolved.
+        public void ShowExplosion(Vector2 position, float radius, DamageSource source, float delay)
+        {
+            Shockwave wave = shockwaves[waveCursor++ % shockwaves.Length];
+            wave.Ring.transform.position = wave.Glow.transform.position = position;
+            wave.Radius = radius;
+            wave.Delay = delay;
+            wave.Remaining = 0.42f;
+            wave.Started = false;
+            wave.Source = source;
+            wave.Color = source == DamageSource.GhostNode ? GameArt.Gold : GameArt.Orange;
+            wave.Ring.enabled = wave.Glow.enabled = false;
+            if (source == DamageSource.GhostNode) ShowWorldLabel(position + Vector2.up * 0.7f, "SPLICE BURST", wave.Color);
+        }
+
+        private void TickShockwaves(float deltaTime)
+        {
+            waveAudioCooldown = Mathf.Max(0f, waveAudioCooldown - deltaTime);
+            if (deltaTime <= 0f) return;
+            for (int i = 0; i < shockwaves.Length; i++)
+            {
+                Shockwave wave = shockwaves[i];
+                if (wave.Remaining <= 0f) continue;
+                float activeDelta = Mathf.Max(0f, deltaTime - Mathf.Max(0f, wave.Delay));
+                wave.Delay -= deltaTime;
+                if (wave.Delay > 0f) continue;
+                if (!wave.Started)
+                {
+                    wave.Started = true;
+                    Burst(wave.Ring.transform.position, wave.Color, 18, 5f);
+                    shake = Mathf.Max(shake, 0.1f);
+                    if (waveAudioCooldown <= 0f)
+                    {
+                        burstSource.PlayOneShot(wave.Source == DamageSource.GhostNode ? spliceClip : explosionClip, 0.55f);
+                        waveAudioCooldown = 0.035f;
+                    }
+                }
+                wave.Remaining = Mathf.Max(0f, wave.Remaining - activeDelta);
+                float progress = 1f - wave.Remaining / 0.42f;
+                float radiusFraction = 1f - Mathf.Pow(1f - progress, 3f);
+                wave.Ring.enabled = wave.Glow.enabled = wave.Remaining > 0f;
+                wave.Ring.transform.localScale = Vector3.one * Mathf.Max(0.01f, wave.Radius * 2.5f * radiusFraction);
+                wave.Glow.transform.localScale = Vector3.one * (wave.Radius * 2.2f);
+                Color color = wave.Color;
+                color.a = (1f - progress) * 0.85f;
+                wave.Ring.color = color;
+                color.a *= 0.2f;
+                wave.Glow.color = color;
+            }
+        }
+
         private void Burst(Vector2 position, Color color, int count, float speed)
         {
             for (int i = 0; i < count; i++)
@@ -226,6 +339,7 @@ namespace RewindRampage
 
         public void Tick(float deltaTime)
         {
+            TickShockwaves(deltaTime);
             for (int i = 0; i < fragments.Length; i++)
             {
                 Fragment fragment = fragments[i];
@@ -276,6 +390,8 @@ namespace RewindRampage
         {
             StopRewind();
             if (effectsSource != null) effectsSource.Stop();
+            if (burstSource != null) burstSource.Stop();
+            waveAudioCooldown = 0f;
             attackFade = shake = 0f;
             history.positionCount = historyGlow.positionCount = attack.positionCount = attackGlow.positionCount = 0;
             if (arenaCamera != null) arenaCamera.transform.position = cameraOrigin;
@@ -291,19 +407,25 @@ namespace RewindRampage
                 popups[i].Remaining = 0f;
                 popups[i].Text.gameObject.SetActive(false);
             }
+            for (int i = 0; i < shockwaves.Length; i++)
+            {
+                if (shockwaves[i] == null) continue;
+                shockwaves[i].Remaining = 0f;
+                shockwaves[i].Ring.enabled = shockwaves[i].Glow.enabled = false;
+            }
         }
 
         public void ToggleMute()
         {
             Muted = !Muted;
-            effectsSource.mute = rewindSource.mute = ambienceSource.mute = Muted;
+            effectsSource.mute = rewindSource.mute = ambienceSource.mute = burstSource.mute = Muted;
         }
 
         public void SetPaused(bool value)
         {
             paused = value;
-            if (value) { effectsSource.Pause(); rewindSource.Pause(); ambienceSource.Pause(); }
-            else { effectsSource.UnPause(); rewindSource.UnPause(); ambienceSource.UnPause(); }
+            if (value) { effectsSource.Pause(); rewindSource.Pause(); ambienceSource.Pause(); burstSource.Pause(); }
+            else { effectsSource.UnPause(); rewindSource.UnPause(); ambienceSource.UnPause(); burstSource.UnPause(); }
         }
 
         private AudioSource CreateSource(bool loop, float volume)

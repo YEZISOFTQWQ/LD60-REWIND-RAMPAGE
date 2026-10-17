@@ -18,6 +18,77 @@ namespace RewindRampage.Editor
         private static GameArt art;
         private static GameTuning tuning;
 
+        [MenuItem("Rewind Rampage/Upgrade scene to v0.2")]
+        public static void UpgradeToV02()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before upgrading the scene.");
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            const string scenePath = "Assets/Scenes/SampleScene.unity";
+            Scene scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+            art = AssetDatabase.LoadAssetAtPath<GameArt>(Root + "/Art/DemoArt.asset");
+            tuning = AssetDatabase.LoadAssetAtPath<GameTuning>(Root + "/Settings/DemoTuning.asset");
+            art.hexagon = Shape("Hexagon", 5);
+            EditorUtility.SetDirty(art);
+            // Copy only new defaults on the first upgrade; preserve all v0.1 tuning and later edits.
+            if (!File.ReadAllText(Root + "/Settings/DemoTuning.asset").Contains("enableGhostNodes:"))
+            {
+                GameTuning defaults = ScriptableObject.CreateInstance<GameTuning>();
+                SerializedObject source = new SerializedObject(defaults);
+                SerializedObject target = new SerializedObject(tuning);
+                string[] fields = { "enableGhostNodes", "ghostNodeUnlockTime", "maximumGhostNodes", "minimumCrossingTime",
+                    "minimumCrossingAngle", "minimumNodeSpacing", "ghostNodeRadius", "ghostNodeDamage", "enableVolatileEnemies",
+                    "enableChainExplosions", "volatileUnlockTime", "volatileSpeed", "maximumVolatileEnemies", "initialVolatileChance",
+                    "finalVolatileChance", "volatileExplosionRadius", "volatileExplosionDamage" };
+                foreach (string field in fields) target.CopyFromSerializedProperty(source.FindProperty(field));
+                target.ApplyModifiedPropertiesWithoutUndo();
+                UnityEngine.Object.DestroyImmediate(defaults);
+            }
+            EditorUtility.SetDirty(tuning);
+
+            string prefabPath = Root + "/Prefabs/Chaser.prefab";
+            GameObject prefab = PrefabUtility.LoadPrefabContents(prefabPath);
+            try
+            {
+                prefab.GetComponent<EnemyController>().Configure(prefab.transform.Find("Red circle").GetComponent<SpriteRenderer>(),
+                    prefab.transform.Find("Dark core").GetComponent<SpriteRenderer>(), prefab.transform.Find("Glow").GetComponent<SpriteRenderer>(), art);
+                PrefabUtility.SaveAsPrefabAsset(prefab, prefabPath);
+            }
+            finally { PrefabUtility.UnloadPrefabContents(prefab); }
+
+            RewindHud hud = null;
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                hud = root.GetComponentInChildren<RewindHud>(true);
+                if (hud != null) break;
+            }
+            if (hud == null) throw new InvalidOperationException("The existing scene has no RewindHud.");
+            SerializedObject serializedHud = new SerializedObject(hud);
+            SerializedProperty view = serializedHud.FindProperty("view");
+            TextMeshProUGUI nodeStatus = EnsureLabel("Exposure / volatile status", hud.transform, new Vector2(0.5f, 1f),
+                new Vector2(0f, -122f), new Vector2(510f, 22f), "DOUBLE EXPOSURE / DEMO v0.2", 12f, GameArt.Gold);
+            TextMeshProUGUI chainLabel = EnsureLabel("Chain reaction", hud.transform, new Vector2(0.5f, 0.5f),
+                new Vector2(0f, 175f), new Vector2(1000f, 35f), string.Empty, 23f, GameArt.Orange);
+            nodeStatus.transform.SetAsFirstSibling();
+            chainLabel.transform.SetAsFirstSibling();
+            view.FindPropertyRelative("nodeStatus").objectReferenceValue = nodeStatus;
+            view.FindPropertyRelative("chainLabel").objectReferenceValue = chainLabel;
+            serializedHud.ApplyModifiedPropertiesWithoutUndo();
+            hud.SetEnglishPreview();
+            EditorUtility.SetDirty(hud);
+            PlayerSettings.bundleVersion = "0.2.0";
+            EditorSceneManager.SaveScene(scene, scenePath);
+            AssetDatabase.SaveAssets();
+            Debug.Log("REWIND RAMPAGE v0.2 scene upgraded in place; English UI, ghost nodes and volatile enemy assets saved.");
+        }
+
+        private static TextMeshProUGUI EnsureLabel(string name, Transform parent, Vector2 anchor, Vector2 position,
+            Vector2 size, string text, float fontSize, Color color)
+        {
+            Transform existing = parent.Find(name);
+            return existing != null ? existing.GetComponent<TextMeshProUGUI>() :
+                Label(name, parent, anchor, position, size, text, fontSize, color, TextAlignmentOptions.Center);
+        }
+
         // Run as a separate batch step: Unity queues package imports until the caller returns.
         public static void ImportTextResources()
         {
@@ -101,6 +172,7 @@ namespace RewindRampage.Editor
             art.triangle = Shape("Triangle", 2);
             art.diamond = Shape("Diamond", 3);
             art.glow = Shape("Glow", 4);
+            art.hexagon = Shape("Hexagon", 5);
             art.lineMaterial = MaterialAsset("NeonLine", "Sprites/Default");
             art.glowMaterial = MaterialAsset("NeonGlow", "RewindRampage/NeonAdditive");
 
@@ -178,6 +250,7 @@ namespace RewindRampage.Editor
                         case 1: distance = 0.035f - Mathf.Abs(p.magnitude - 0.4f); break;
                         case 2: distance = Mathf.Min(p.y + 0.36f, 0.46f - p.y - Mathf.Abs(p.x) * 1.95f); break;
                         case 3: distance = 0.46f - Mathf.Abs(p.x) - Mathf.Abs(p.y); break;
+                        case 5: distance = Mathf.Min(0.4f - Mathf.Abs(p.y), 0.4f - 0.8660254f * Mathf.Abs(p.x) - 0.5f * Mathf.Abs(p.y)); break;
                         default: distance = 0.46f - p.magnitude; break;
                     }
                     float alpha = shape == 4 ? Mathf.Pow(Mathf.Clamp01(1f - p.magnitude * 2f), 2.4f)
@@ -310,7 +383,7 @@ namespace RewindRampage.Editor
             SpriteRenderer core = Sprite("Dark core", obj.transform, art.disc, Vector2.zero, Vector2.one * 0.36f,
                 new Color(0.3f, 0.045f, 0.09f), 7);
             Sprite("Signal diamond", obj.transform, art.diamond, Vector2.zero, Vector2.one * 0.12f, GameArt.Red, 8);
-            enemy.Configure(body, core, halo);
+            enemy.Configure(body, core, halo, art);
             EnemyController prefab = PrefabUtility.SaveAsPrefabAsset(obj, Root + "/Prefabs/Chaser.prefab").GetComponent<EnemyController>();
             UnityEngine.Object.DestroyImmediate(obj);
             return prefab;
@@ -381,14 +454,18 @@ namespace RewindRampage.Editor
                 "[W A S D] MOVE    [SPACE] REWIND", 18f, GameArt.White, TextAlignmentOptions.Right);
             Label("Pause hint", parent, new Vector2(1f, 0f), new Vector2(-64f, 48f), new Vector2(500f, 20f),
                 "RECORD. LURE. REWIND.    ESC / PAUSE", 12f, GameArt.Muted, TextAlignmentOptions.Right);
-            refs.instructions = Label("Contextual Chinese instruction", parent, new Vector2(0.5f, 0f), new Vector2(0f, 166f), new Vector2(1350f, 34f),
-                "WASD 移动留下轨迹，引诱红色追踪者跟上", 19f, GameArt.White, TextAlignmentOptions.Center);
+            refs.instructions = Label("Contextual instruction", parent, new Vector2(0.5f, 0f), new Vector2(0f, 166f), new Vector2(1350f, 34f),
+                "WASD TO RECORD A PATH. LURE THE RED CHASERS BEHIND YOU.", 19f, GameArt.White, TextAlignmentOptions.Center);
             refs.notice = Label("Unavailable / damage notice", parent, new Vector2(0.5f, 0f), new Vector2(0f, 204f), new Vector2(1350f, 32f),
                 "", 19f, GameArt.Gold, TextAlignmentOptions.Center);
             refs.bannerTitle = Label("Combo headline", parent, new Vector2(0.5f, 0.5f), new Vector2(0f, 255f), new Vector2(1000f, 60f),
                 "", 40f, GameArt.Gold, TextAlignmentOptions.Center);
             refs.bannerDetail = Label("Combo detail", parent, new Vector2(0.5f, 0.5f), new Vector2(0f, 216f), new Vector2(1200f, 32f),
                 "", 15f, GameArt.White, TextAlignmentOptions.Center);
+            refs.nodeStatus = Label("Exposure / volatile status", parent, new Vector2(0.5f, 1f), new Vector2(0f, -122f), new Vector2(510f, 22f),
+                "DOUBLE EXPOSURE / DEMO v0.2", 12f, GameArt.Gold, TextAlignmentOptions.Center);
+            refs.chainLabel = Label("Chain reaction", parent, new Vector2(0.5f, 0.5f), new Vector2(0f, 175f), new Vector2(1000f, 35f),
+                "", 23f, GameArt.Orange, TextAlignmentOptions.Center);
             refs.flash = Box("Damage flash", parent, Vector2.zero, Vector2.zero, Vector2.zero, Color.clear);
             Stretch(refs.flash.rectTransform);
 
@@ -419,14 +496,14 @@ namespace RewindRampage.Editor
             Box("Case top rule", panel, new Vector2(0f, 1f), Vector2.zero, new Vector2(1120f, 2f), new Color(0.13f, 0.29f, 0.34f));
             Box("Case bottom rule", panel, Vector2.zero, Vector2.zero, new Vector2(1120f, 2f), new Color(0.13f, 0.29f, 0.34f));
             refs.menuTag = Label("Menu eyebrow", panel, new Vector2(0f, 1f), new Vector2(56f, -40f), new Vector2(1000f, 28f),
-                "TAPE 001 / OLD TECH / SCORE ATTACK", 15f, GameArt.Cyan);
+                "TAPE 002 / OLD TECH / DEMO v0.2", 15f, GameArt.Cyan);
             refs.menuTitle = Label("Menu title", panel, new Vector2(0f, 1f), new Vector2(50f, -102f), new Vector2(750f, 205f),
                 "REWIND\n<color=#FFC242>RAMPAGE</color>", 82f, GameArt.White);
             refs.menuTitle.lineSpacing = -16f;
             refs.menuLead = Label("Menu lead", panel, new Vector2(0f, 1f), new Vector2(56f, -327f), new Vector2(1010f, 48f),
                 "YOUR PAST IS YOUR WEAPON.", 27f, GameArt.Gold);
-            refs.menuInstructions = Label("Menu Chinese instructions", panel, new Vector2(0f, 1f), new Vector2(56f, -399f), new Vector2(1000f, 127f),
-                "WASD 移动，录下最近 3 秒的路线\n引诱红色追踪者靠近蓝色轨迹\n按 SPACE 倒带，沿原路高速反杀", 24f, GameArt.White);
+            refs.menuInstructions = Label("Menu instructions", panel, new Vector2(0f, 1f), new Vector2(56f, -399f), new Vector2(1000f, 127f),
+                RewindHud.TitleInstructions, 24f, GameArt.White);
             refs.menuInstructions.lineSpacing = 12f;
             refs.menuStats = Label("Session facts / result summary", panel, new Vector2(0f, 1f), new Vector2(56f, -550f), new Vector2(1000f, 30f),
                 "90 SECONDS     /     3 LIVES     /     ONE OLD TAPE", 15f, GameArt.Muted);

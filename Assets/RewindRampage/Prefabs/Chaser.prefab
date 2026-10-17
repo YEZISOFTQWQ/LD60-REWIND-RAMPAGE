@@ -51,6 +51,7 @@ MonoBehaviour:
   body: {fileID: 2061169467527556856}
   core: {fileID: 6514352407294089209}
   halo: {fileID: 831572290684056590}
+  art: {fileID: 11400000, guid: 5a577fdc7baede542856337a3ad785a9, type: 2}
 --- !u!1 &2310465768354980923
 GameObject:
   m_ObjectHideFlags: 0

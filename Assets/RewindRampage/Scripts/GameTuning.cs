@@ -30,6 +30,27 @@ namespace RewindRampage
         [Min(0.1f)] public float finalSpawnInterval = 0.38f;
         [Min(0f)] public float spawnWarningDuration = 0.5f;
 
+        [Header("Double exposure")]
+        public bool enableGhostNodes = true;
+        [Min(0f)] public float ghostNodeUnlockTime = 15f;
+        [Range(1, 8)] public int maximumGhostNodes = 2;
+        [Min(0f)] public float minimumCrossingTime = 0.6f;
+        [Range(1f, 90f)] public float minimumCrossingAngle = 25f;
+        [Min(0.01f)] public float minimumNodeSpacing = 0.65f;
+        [Min(0.01f)] public float ghostNodeRadius = 1.5f;
+        [Min(1)] public int ghostNodeDamage = 1;
+
+        [Header("Volatile enemies")]
+        public bool enableVolatileEnemies = true;
+        public bool enableChainExplosions = true;
+        [Min(0f)] public float volatileUnlockTime = 25f;
+        [Min(0.1f)] public float volatileSpeed = 1.8f;
+        [Range(1, 10)] public int maximumVolatileEnemies = 3;
+        [Range(0f, 1f)] public float initialVolatileChance = 0.1f;
+        [Range(0f, 1f)] public float finalVolatileChance = 0.15f;
+        [Min(0.01f)] public float volatileExplosionRadius = 1.75f;
+        [Min(1)] public int volatileExplosionDamage = 1;
+
         public Vector2 ClampToArena(Vector2 position, float radius)
         {
             return new Vector2(

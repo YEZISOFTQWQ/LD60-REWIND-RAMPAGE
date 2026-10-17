@@ -1,27 +1,28 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#080f18">
-  <meta name="description" content="REWIND RAMPAGE：前进布置路线，倒退执行攻击。WASD 移动，Space 倒带。">
+  <meta name="description" content="REWIND RAMPAGE: record your path, rewind to attack, splice crossing trails and trigger explosive chain reactions.">
   <title>REWIND RAMPAGE — YEZISOFTQWQ</title>
   <link rel="stylesheet" href="TemplateData/style.css">
 </head>
 <body>
   <main>
     <header>
-      <div class="brand"><span class="mark" aria-hidden="true">&lt;&lt;</span><div><h1>REWIND <span>RAMPAGE</span></h1><p>TAPE 001 / OLD TECH / DEMO v0.1</p></div></div>
-      <button id="fullscreen" type="button">全屏试玩 <span aria-hidden="true">↗</span></button>
+      <div class="brand"><span class="mark" aria-hidden="true">&lt;&lt;</span><div><h1>REWIND <span>RAMPAGE</span></h1><p>TAPE 002 / OLD TECH / DEMO v0.2</p></div></div>
+      <button id="fullscreen" type="button">FULLSCREEN <span aria-hidden="true">↗</span></button>
     </header>
-    <section class="player" aria-label="REWIND RAMPAGE 在线试玩">
-      <canvas id="unity-canvas" width="1600" height="1000" tabindex="0" aria-label="游戏画面，WASD 移动，Space 倒带">你的浏览器需要支持 WebGL 2。</canvas>
-      <div id="loading" role="status" aria-live="polite"><div class="loading-mark">&lt;&lt;</div><h2>THREADING THE TAPE</h2><p id="progress-label">正在加载录像设备…</p><div class="progress"><span id="progress-fill"></span></div></div>
+    <section class="player" aria-label="Play REWIND RAMPAGE">
+      <canvas id="unity-canvas" width="1600" height="1000" tabindex="0" aria-label="Game canvas. WASD to move, Space to rewind.">Your browser must support WebGL 2.</canvas>
+      <div id="loading" role="status" aria-live="polite"><div class="loading-mark">&lt;&lt;</div><h2>THREADING THE TAPE</h2><p id="progress-label">Loading the tape deck...</p><div class="progress"><span id="progress-fill"></span></div></div>
       <div id="error" role="alert" hidden></div>
     </section>
     <footer>
-      <p><kbd>W A S D</kbd> 移动录制 <span>·</span> <kbd>SPACE</kbd> 倒带攻击 <span>·</span> <kbd>ESC</kbd> 暂停 <span>·</span> <kbd>M</kbd> 声音</p>
-      <p>前进是布局，倒退是攻击。<span class="credit">BY YEZISOFTQWQ</span></p>
+      <p><kbd>W A S D</kbd> MOVE / RECORD <span>·</span> <kbd>SPACE</kbd> REWIND / ATTACK <span>·</span> <kbd>ESC</kbd> PAUSE <span>·</span> <kbd>M</kbd> SOUND</p>
+      <p>Cross your trail to plant gold nodes. Rewind to detonate. Orange enemies chain-explode.</p>
+      <p>Your past is your weapon.<span class="credit">BY YEZISOFTQWQ</span></p>
     </footer>
   </main>
   <script>
@@ -43,11 +44,11 @@
       if (playerInstance) { playerInstance.SetFullscreen(1); canvas.focus(); }
     });
     if (location.protocol === 'file:') {
-      showError('请通过 HTTP / HTTPS 打开试玩页面。可将本仓库的 GitHub Pages 发布目录设置为 main 分支的 /docs。');
+      showError('Open this game over HTTP or HTTPS. For GitHub Pages, publish the main branch /docs folder.');
     } else {
       const loader = document.createElement('script');
       loader.src = 'Build/docs.loader.js';
-      loader.onerror = () => showError('游戏文件加载失败，请稍后刷新。');
+      loader.onerror = () => showError('The game files could not be loaded. Please refresh and try again.');
       loader.onload = () => {
         createUnityInstance(canvas, {
           dataUrl: 'Build/docs.data.unityweb',
@@ -56,16 +57,16 @@
           streamingAssetsUrl: 'StreamingAssets',
           companyName: 'Tape Lab',
           productName: 'REWIND RAMPAGE',
-          productVersion: '0.1.0',
+          productVersion: '0.2.0',
           showBanner: (message, type) => { if (type === 'error') showError(message); }
         }, progress => {
           document.querySelector('#progress-fill').style.width = `${Math.round(progress * 100)}%`;
-          document.querySelector('#progress-label').textContent = `正在加载录像设备… ${Math.round(progress * 100)}%`;
+          document.querySelector('#progress-label').textContent = `Loading the tape deck... ${Math.round(progress * 100)}%`;
         }).then(instance => {
           playerInstance = instance;
           loading.hidden = true;
           canvas.focus();
-        }).catch(message => showError('启动失败：' + message));
+        }).catch(message => showError('Unable to start the game: ' + message));
       };
       document.body.appendChild(loader);
     }

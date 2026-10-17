@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -29,6 +30,10 @@ namespace RewindRampage
         public float Duration => points.Count == 0 ? 0f : currentTime - points[0].Time;
         public float MovingDuration { get; private set; }
         public Vector2 CurrentPosition => currentPosition;
+        public float WindowStart => points.Count == 0 ? currentTime : Mathf.Max(points[0].Time, currentTime - tuning.recordDuration);
+        public event Action<IReadOnlyList<TrailPoint>, int> SegmentAdded;
+        public event Action<float> WindowAdvanced;
+        public event Action HistoryCleared;
 
         public TrailRecorder(GameTuning tuning)
         {
@@ -44,17 +49,20 @@ namespace RewindRampage
             currentTime = time;
             nextSample = time + tuning.sampleInterval;
             MovingDuration = 0f;
+            HistoryCleared?.Invoke();
         }
 
         public void Record(Vector2 previousPosition, Vector2 position, float previousTime, float time)
         {
             currentPosition = position;
             currentTime = time;
+            WindowAdvanced?.Invoke(WindowStart);
             float frameDuration = time - previousTime;
             while (nextSample <= time + 0.00001f)
             {
                 float fraction = frameDuration > 0f ? Mathf.Clamp01((nextSample - previousTime) / frameDuration) : 1f;
-                points.Add(new TrailPoint(Vector2.Lerp(previousPosition, position, fraction), nextSample));
+                points.Add(new TrailPoint(Vector2.Lerp(previousPosition, position, fraction), Mathf.Min(nextSample, time)));
+                SegmentAdded?.Invoke(points, points.Count - 2);
                 nextSample += tuning.sampleInterval;
             }
 

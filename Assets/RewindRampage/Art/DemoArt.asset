@@ -17,6 +17,7 @@ MonoBehaviour:
   triangle: {fileID: 21300000, guid: 5bd9a5d42bc82184faf10425dfb124f7, type: 3}
   diamond: {fileID: 21300000, guid: 8954a8c002209d8468935e5956742a48, type: 3}
   glow: {fileID: 21300000, guid: 93d313e86cee64e4bae184d0bc051f4b, type: 3}
+  hexagon: {fileID: 21300000, guid: b95af92f69fbc3545a8de35b7b900f7a, type: 3}
   lineMaterial: {fileID: 2100000, guid: 01f2215bc2239884f83d6ca50ba8e261, type: 2}
   glowMaterial: {fileID: 2100000, guid: 5cec64f5c9b5a0a4499566750b740342, type: 2}
   font: {fileID: 11400000, guid: 31c00f26a680b7f47b28bb3c7b3c1c09, type: 2}

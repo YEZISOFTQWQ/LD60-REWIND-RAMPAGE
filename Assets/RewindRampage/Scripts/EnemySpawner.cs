@@ -11,6 +11,7 @@ namespace RewindRampage
         private float spawnTimer;
         private bool tutorialSpawned;
         private int nextSpawnId;
+        private bool firstVolatileSpawned;
 
         public IReadOnlyList<EnemyController> Enemies => enemies;
         public int AliveCount
@@ -19,6 +20,17 @@ namespace RewindRampage
             {
                 int count = 0;
                 for (int i = 0; i < enemies.Count; i++) if (enemies[i].IsAlive) count++;
+                return count;
+            }
+        }
+
+        public int VolatileCount
+        {
+            get
+            {
+                int count = 0;
+                for (int i = 0; i < enemies.Count; i++)
+                    if (enemies[i].IsAlive && enemies[i].IsVolatile) count++;
                 return count;
             }
         }
@@ -32,17 +44,18 @@ namespace RewindRampage
             {
                 EnemyController enemy = Instantiate(enemyPrefab, transform);
                 enemy.name = "Chaser " + (i + 1).ToString("00");
-                enemy.Die();
+                enemy.Despawn();
                 enemies.Add(enemy);
             }
         }
 
         public void ResetEnemies()
         {
-            for (int i = 0; i < enemies.Count; i++) enemies[i].Die();
+            for (int i = 0; i < enemies.Count; i++) enemies[i].Despawn();
             spawnTimer = 2f;
             tutorialSpawned = false;
             nextSpawnId = 0;
+            firstVolatileSpawned = false;
         }
 
         public void Tick(float deltaTime, float elapsed, PlayerController player)
@@ -63,8 +76,13 @@ namespace RewindRampage
             if (spawnTimer <= 0f)
             {
                 float difficulty = Mathf.Clamp01(elapsed / tuning.roundDuration);
-                Spawn(ChooseEdgePosition(player.Position),
-                    tuning.enemySpeed * Mathf.Lerp(0.72f, 1f, Mathf.Clamp01(elapsed / 15f)), tuning.spawnWarningDuration);
+                float volatileProgress = Mathf.InverseLerp(tuning.volatileUnlockTime, tuning.roundDuration, elapsed);
+                bool spawnVolatile = tuning.enableVolatileEnemies && elapsed >= tuning.volatileUnlockTime &&
+                    VolatileCount < tuning.maximumVolatileEnemies && (!firstVolatileSpawned ||
+                    Random.value < Mathf.Lerp(tuning.initialVolatileChance, tuning.finalVolatileChance, volatileProgress));
+                bool spawned = Spawn(ChooseEdgePosition(player.Position), spawnVolatile ? tuning.volatileSpeed :
+                    tuning.enemySpeed * Mathf.Lerp(0.72f, 1f, Mathf.Clamp01(elapsed / 15f)), tuning.spawnWarningDuration, spawnVolatile);
+                if (spawned && spawnVolatile) firstVolatileSpawned = true;
                 spawnTimer += Mathf.Lerp(tuning.initialSpawnInterval, tuning.finalSpawnInterval, difficulty);
                 // Do not accumulate an unbounded spawn debt during a very slow frame.
                 spawnTimer = Mathf.Max(0.05f, spawnTimer);
@@ -95,14 +113,15 @@ namespace RewindRampage
             return best;
         }
 
-        private void Spawn(Vector2 position, float speed, float warning)
+        private bool Spawn(Vector2 position, float speed, float warning, bool isVolatile = false)
         {
             for (int i = 0; i < enemies.Count; i++)
             {
                 if (enemies[i].IsAlive) continue;
-                enemies[i].Spawn(++nextSpawnId, tuning.ClampToArena(position, tuning.enemyRadius), speed, warning);
-                return;
+                enemies[i].Spawn(++nextSpawnId, tuning.ClampToArena(position, tuning.enemyRadius), speed, warning, isVolatile);
+                return true;
             }
+            return false;
         }
 
         public void SetFrozenVisuals(bool frozen)

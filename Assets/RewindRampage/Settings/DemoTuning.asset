@@ -31,3 +31,20 @@ MonoBehaviour:
   initialSpawnInterval: 1.5
   finalSpawnInterval: 0.38
   spawnWarningDuration: 0.5
+  enableGhostNodes: 1
+  ghostNodeUnlockTime: 15
+  maximumGhostNodes: 2
+  minimumCrossingTime: 0.6
+  minimumCrossingAngle: 25
+  minimumNodeSpacing: 0.65
+  ghostNodeRadius: 1.5
+  ghostNodeDamage: 1
+  enableVolatileEnemies: 1
+  enableChainExplosions: 1
+  volatileUnlockTime: 25
+  volatileSpeed: 1.8
+  maximumVolatileEnemies: 3
+  initialVolatileChance: 0.1
+  finalVolatileChance: 0.15
+  volatileExplosionRadius: 1.75
+  volatileExplosionDamage: 1

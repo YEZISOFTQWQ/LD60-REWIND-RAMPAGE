@@ -7,6 +7,7 @@ namespace RewindRampage
 {
     public sealed class RewindHud : MonoBehaviour
     {
+        public const string TitleInstructions = "WASD records your last 3 seconds. SPACE rewinds to attack.\nCross your trail to plant gold nodes. Rewind to detonate.\nOrange hexagons explode on death. Chain them together.";
         [Serializable]
         public sealed class References
         {
@@ -22,6 +23,8 @@ namespace RewindRampage
             public TextMeshProUGUI bannerTitle;
             public TextMeshProUGUI bannerDetail;
             public TextMeshProUGUI muteLabel;
+            public TextMeshProUGUI nodeStatus;
+            public TextMeshProUGUI chainLabel;
             public UnityEngine.UI.Image recordDot;
             public UnityEngine.UI.Image flash;
             public UnityEngine.UI.Image[] health;
@@ -54,6 +57,7 @@ namespace RewindRampage
         private string previousMode;
         private string previousHint;
         private string previousAbility;
+        private float chainRemaining;
 
         public void Configure(References references) { view = references; }
 
@@ -78,9 +82,10 @@ namespace RewindRampage
             view.menu.SetActive(!playing);
             view.restart.gameObject.SetActive(game.State == SessionState.Paused);
             if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
-            bannerRemaining = noticeRemaining = 0f;
+            bannerRemaining = noticeRemaining = chainRemaining = 0f;
             damageFlash = 0f;
             view.notice.text = view.bannerTitle.text = view.bannerDetail.text = string.Empty;
+            view.chainLabel.text = string.Empty;
             previousHealth = game.Player.Health;
             previousHint = previousMode = previousAbility = null;
             displayedScore = displayedSeconds = displayedEnemies = -1;
@@ -89,10 +94,10 @@ namespace RewindRampage
             switch (game.State)
             {
                 case SessionState.Title:
-                    view.menuTag.text = "TAPE 001 / OLD TECH / SCORE ATTACK";
+                    view.menuTag.text = "TAPE 002 / OLD TECH / DEMO v0.2";
                     view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
                     view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
-                    view.menuInstructions.text = "WASD 移动，录下最近 3 秒的路线\n引诱红色追踪者靠近蓝色轨迹\n按 SPACE 倒带，沿原路高速反杀";
+                    view.menuInstructions.text = TitleInstructions;
                     view.menuStats.text = "90 SECONDS     /     3 LIVES     /     ONE OLD TAPE";
                     view.primaryLabel.text = "PLAY TAPE  >  [ SPACE ]";
                     break;
@@ -100,7 +105,7 @@ namespace RewindRampage
                     view.menuTag.text = "II PAUSE / TAPE HELD";
                     view.menuTitle.text = "HOLD THE\n<color=#FFC242>SIGNAL</color>";
                     view.menuLead.text = "TAKE A BREATH. THE TAPE CAN WAIT.";
-                    view.menuInstructions.text = "游戏已暂停\nESC 继续 / M 开关声音\n倒带、敌人、冷却与计时均已暂停";
+                    view.menuInstructions.text = "TAPE PAUSED\nESC resumes / M toggles sound\nMovement, enemies, rewind and the round timer are paused.";
                     view.menuStats.SetText("SCORE {0:000000}     /     KILLS {1}", game.Score, game.TotalKills);
                     view.primaryLabel.text = "RESUME  >  [ ESC ]";
                     break;
@@ -108,10 +113,10 @@ namespace RewindRampage
                     view.menuTag.text = game.Survived ? "END OF TAPE / RECORDING SAVED" : "SIGNAL LOST / RECORDING ENDED";
                     view.menuTitle.text = game.Survived ? "TAPE\n<color=#FFC242>COMPLETE</color>" : "SIGNAL\n<color=#FF4864>LOST</color>";
                     view.menuLead.SetText("FINAL SCORE  {0:000000}", game.Score);
-                    view.menuInstructions.text = "总击杀  " + game.TotalKills + "    最大单次倒带击杀  " + game.BestRewindKills +
-                        "\n最高连击  " + game.BestCombo + "    生存时间  " + game.Elapsed.ToString("0.0") + " 秒" +
-                        "\n倒带次数  " + game.RewindCount + "    剩余生命  " + game.Player.Health;
-                    view.menuStats.text = game.Survived ? "RECORD. LURE. REWIND. REPEAT." : "再试一次，让追踪者进入你的过去。";
+                    view.menuInstructions.text = "KILLS " + game.TotalKills + "    BEST REWIND " + game.BestRewindKills + "    MAX COMBO " + game.BestCombo +
+                        "\nSURVIVED " + game.Elapsed.ToString("0.0") + "s    REWINDS " + game.RewindCount + "    LIVES " + game.Player.Health +
+                        "\nSPLICE BURSTS " + game.TotalGhostNodeTriggers + "    CHAIN KILLS " + game.TotalChainKills;
+                    view.menuStats.text = game.Survived ? "RECORD. LURE. REWIND. REPEAT." : "TRY AGAIN. LURE THE SIGNAL INTO YOUR PAST.";
                     view.primaryLabel.text = "RETRY TAPE  >  [ SPACE ]";
                     break;
             }
@@ -171,18 +176,25 @@ namespace RewindRampage
             float reelSpeed = rewinding ? -800f : game.State == SessionState.Playing ? 65f : 12f;
             for (int i = 0; i < view.reels.Length; i++) view.reels[i].Rotate(0f, 0f, reelSpeed * deltaTime);
 
-            int phase = game.Elapsed < 15f ? 0 : game.Elapsed < 35f ? 1 : game.Elapsed < 60f ? 2 : 3;
+            int phase = game.Elapsed < 15f ? 0 : game.Elapsed < 25f ? 1 : game.Elapsed < 45f ? 2 : game.Elapsed < 65f ? 3 : 4;
             if (phase != lastPhase)
             {
                 lastPhase = phase;
-                view.phase.text = new[] { "01 / LEARN THE TAPE", "02 / LURE THE SIGNAL", "03 / CROSS THE NOISE", "04 / FINAL TRANSMISSION" }[phase];
+                view.phase.text = new[] { "01 / LEARN THE TAPE", "02 / DOUBLE EXPOSURE", "03 / VOLATILE SIGNALS", "04 / CHAIN REACTION", "05 / FINAL TRANSMISSION" }[phase];
+                if (game.State == SessionState.Playing && phase == 1 && game.Tuning.enableGhostNodes)
+                    ShowNotice("DOUBLE EXPOSURE ONLINE / CROSS YOUR TRAIL TO PLANT A GOLD NODE.");
+                if (game.State == SessionState.Playing && phase == 2 && game.Tuning.enableVolatileEnemies)
+                    ShowNotice("VOLATILE SIGNALS ONLINE / ORANGE HEXAGONS EXPLODE ON DEATH.");
             }
 
-            string hint = rewinding ? "倒带中：路径造成伤害，敌人冻结，玩家无敌" : game.Elapsed < 5f
-                ? "WASD 移动留下轨迹，引诱红色追踪者跟上" : game.Elapsed < 12f && game.RewindCount == 0
-                ? "SPACE 倒带反杀！蓝色轨迹本身不会造成伤害" : cooling
-                ? "冷却时继续移动，规划下一条攻击路线" : ready
-                ? "SPACE 已就绪：越多敌人靠近轨迹，连击分数越高" : "继续移动：需要至少 1 秒有效轨迹";
+            string hint = rewinding ? "REWIND / ENEMIES FROZEN. YOU ARE INVULNERABLE." : game.Elapsed < 5f
+                ? "WASD TO RECORD A PATH. LURE THE RED CHASERS BEHIND YOU." : game.Elapsed < 12f && game.RewindCount == 0
+                ? "SPACE TO REWIND AND ATTACK. THE BLUE TRAIL CANNOT HURT ENEMIES." : cooling
+                ? "KEEP MOVING WHILE THE TAPE RECHARGES. PLAN YOUR NEXT ATTACK." : game.GhostNodeCount > 0
+                ? "GOLD NODE ARMED / REWIND THROUGH IT TO RELEASE A SPLICE BURST." : game.VolatileCount > 0
+                ? "ORANGE HEXAGONS EXPLODE / LURE CHASERS CLOSE, THEN REWIND." : game.Tuning.enableGhostNodes && game.Elapsed >= game.Tuning.ghostNodeUnlockTime
+                ? "CROSS YOUR TRAIL AT A CLEAR ANGLE TO PLANT A GOLD NODE." : ready
+                ? "SPACE READY / LURE CHASERS NEAR YOUR PATH FOR A BIGGER COMBO." : "KEEP MOVING / RECORD AT LEAST 1 SECOND OF MOVEMENT.";
             if (previousHint != hint) { view.instructions.text = hint; previousHint = hint; }
 
             noticeRemaining = Mathf.Max(0f, noticeRemaining - deltaTime);
@@ -191,6 +203,17 @@ namespace RewindRampage
             float bannerAlpha = Mathf.Clamp01(bannerRemaining * 4f);
             view.bannerTitle.alpha = view.bannerDetail.alpha = bannerAlpha;
             view.muteLabel.text = game.Muted ? "M / SOUND OFF" : "M / SOUND ON";
+            if (game.Tuning.enableGhostNodes && game.Elapsed < game.Tuning.ghostNodeUnlockTime)
+                view.nodeStatus.SetText("DOUBLE EXPOSURE IN {0}s", Mathf.Ceil(game.Tuning.ghostNodeUnlockTime - game.Elapsed));
+            else if (game.Tuning.enableVolatileEnemies && game.Elapsed < game.Tuning.volatileUnlockTime)
+                view.nodeStatus.SetText("NODES {0}/{1} / VOLATILES IN {2}s", game.GhostNodeCount, game.Tuning.maximumGhostNodes,
+                    Mathf.Ceil(game.Tuning.volatileUnlockTime - game.Elapsed));
+            else
+                view.nodeStatus.SetText("NODES {0}/{1} / VOLATILES {2}/{3}", game.GhostNodeCount,
+                    game.Tuning.enableGhostNodes ? game.Tuning.maximumGhostNodes : 0, game.VolatileCount,
+                    game.Tuning.enableVolatileEnemies ? game.Tuning.maximumVolatileEnemies : 0);
+            chainRemaining = Mathf.Max(0f, chainRemaining - deltaTime);
+            view.chainLabel.alpha = Mathf.Clamp01(chainRemaining * 4f);
         }
 
         public void ShowBurst(string title, string detail, Color color, float duration)
@@ -205,6 +228,26 @@ namespace RewindRampage
         {
             noticeRemaining = 1.7f;
             view.notice.text = message;
+        }
+
+        public void ShowChain(int kills)
+        {
+            chainRemaining = 1.8f;
+            view.chainLabel.SetText("CHAIN REACTION / CHAIN x{0}", kills);
+            view.chainLabel.color = GameArt.Orange;
+        }
+
+        public void SetEnglishPreview()
+        {
+            view.menuTag.text = "TAPE 002 / OLD TECH / DEMO v0.2";
+            view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
+            view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
+            view.menuInstructions.text = TitleInstructions;
+            view.menuStats.text = "90 SECONDS     /     3 LIVES     /     ONE OLD TAPE";
+            view.instructions.text = "WASD TO RECORD A PATH. LURE THE RED CHASERS BEHIND YOU.";
+            view.primaryLabel.text = "PLAY TAPE  >  [ SPACE ]";
+            view.notice.text = view.bannerTitle.text = view.bannerDetail.text = view.chainLabel.text = string.Empty;
+            view.nodeStatus.text = "DOUBLE EXPOSURE / DEMO v0.2";
         }
 
         private void OnDestroy()

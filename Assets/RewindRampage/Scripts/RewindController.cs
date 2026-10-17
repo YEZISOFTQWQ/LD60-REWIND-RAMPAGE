@@ -12,7 +12,10 @@ namespace RewindRampage
         private readonly TrailDamageSystem damage;
         private readonly FeedbackController feedback;
         private readonly Action<int, int> onFinished;
+        private readonly TrailIntersectionDetector intersections;
+        private readonly GhostNodeController nodes;
         private readonly List<TrailPoint> activePath = new List<TrailPoint>(64);
+        private readonly List<GhostNode> activeNodes = new List<GhostNode>(2);
         private int targetIndex;
         private float playbackTime;
         private float cooldownRemaining;
@@ -23,7 +26,8 @@ namespace RewindRampage
         public bool IsReady => !IsRewinding && cooldownRemaining <= 0f && recorder.MovingDuration + 0.0001f >= tuning.minimumMovingDuration;
 
         public RewindController(GameTuning tuning, PlayerController player, TrailRecorder recorder,
-            TrailDamageSystem damage, FeedbackController feedback, Action<int, int> onFinished)
+            TrailDamageSystem damage, FeedbackController feedback, TrailIntersectionDetector intersections,
+            GhostNodeController nodes, Action<int, int> onFinished)
         {
             this.tuning = tuning;
             this.player = player;
@@ -31,6 +35,8 @@ namespace RewindRampage
             this.damage = damage;
             this.feedback = feedback;
             this.onFinished = onFinished;
+            this.intersections = intersections;
+            this.nodes = nodes;
         }
 
         public void Reset()
@@ -38,7 +44,10 @@ namespace RewindRampage
             IsRewinding = false;
             cooldownRemaining = 0f;
             activePath.Clear();
-            damage.Begin();
+            activeNodes.Clear();
+            intersections.ClearNodes();
+            nodes.ClearAllNodes();
+            damage.Cancel();
             feedback.StopRewind();
         }
 
@@ -50,12 +59,13 @@ namespace RewindRampage
             recorder.CopyPath(activePath);
             if (activePath.Count < 2) return false;
             damage.Begin();
+            intersections.CopyActiveNodes(activeNodes);
             IsRewinding = true;
             playbackTime = activePath[activePath.Count - 1].Time;
             targetIndex = activePath.Count - 2;
             feedback.BeginRewind(activePath);
             // The starting disc is part of the attack, including a stationary endpoint.
-            damage.Sweep(player.Position, player.Position);
+            TravelTo(player.Position, playbackTime);
             return true;
         }
 
@@ -67,7 +77,7 @@ namespace RewindRampage
             // Sweeping directly to the final endpoint would cut across the recorded route.
             while (targetIndex >= 0 && activePath[targetIndex].Time >= nextTime - 0.000001f)
             {
-                TravelTo(activePath[targetIndex].Position);
+                TravelTo(activePath[targetIndex].Position, activePath[targetIndex].Time);
                 targetIndex--;
             }
 
@@ -76,7 +86,7 @@ namespace RewindRampage
                 TrailPoint older = activePath[targetIndex];
                 TrailPoint newer = activePath[targetIndex + 1];
                 TravelTo(Vector2.Lerp(older.Position, newer.Position,
-                    Mathf.InverseLerp(older.Time, newer.Time, nextTime)));
+                    Mathf.InverseLerp(older.Time, newer.Time, nextTime)), nextTime);
             }
             playbackTime = nextTime;
             feedback.SetRewindPitch(Mathf.InverseLerp(activePath[0].Time, activePath[activePath.Count - 1].Time, nextTime));
@@ -86,15 +96,33 @@ namespace RewindRampage
             cooldownRemaining = tuning.rewindCooldown;
             player.Protect(gameTime, tuning.exitInvulnerability);
             recorder.Clear(player.Position, gameTime);
+            activeNodes.Clear();
+            nodes.ClearAllNodes();
+            damage.EndAttack();
             feedback.FinishRewind();
             onFinished(damage.KillCount, damage.Score);
         }
 
-        private void TravelTo(Vector2 target)
+        private void TravelTo(Vector2 target, float targetTime)
         {
+            // Split at the LATER crossing timestamp, not by spatial proximity.
+            // This preserves event order even across multiple corners/nodes in a single frame.
+            for (int i = 0; i < activeNodes.Count; i++)
+            {
+                GhostNode node = activeNodes[i];
+                if (!node.IsActive || node.HasTriggered || node.LaterTime > playbackTime + 0.00001f || node.LaterTime < targetTime - 0.00001f) continue;
+                damage.Sweep(player.Position, node.Position);
+                player.SetPosition(node.Position);
+                feedback.AppendAttackPoint(node.Position);
+                nodes.TriggerNode(node);
+                damage.ResolveExplosions();
+                playbackTime = node.LaterTime;
+            }
             damage.Sweep(player.Position, target);
             player.SetPosition(target);
             feedback.AppendAttackPoint(target);
+            damage.ResolveExplosions();
+            playbackTime = targetTime;
         }
     }
 }

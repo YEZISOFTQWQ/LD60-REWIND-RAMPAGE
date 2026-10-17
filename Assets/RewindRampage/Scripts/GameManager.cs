@@ -17,6 +17,8 @@ namespace RewindRampage
         private TrailRecorder recorder;
         private TrailDamageSystem damage;
         private RewindController rewind;
+        private TrailIntersectionDetector intersections;
+        private GhostNodeController ghostNodes;
         private int lastWidth;
         private int lastHeight;
         private Vector2 movementStart;
@@ -31,6 +33,10 @@ namespace RewindRampage
         public int BestRewindKills { get; private set; }
         public int BestCombo { get; private set; }
         public int RewindCount { get; private set; }
+        public int TotalGhostNodeTriggers { get; private set; }
+        public int TotalChainKills { get; private set; }
+        public int GhostNodeCount => intersections.ActiveCount;
+        public int VolatileCount => spawner.VolatileCount;
         public int BestScore { get; private set; }
         public float Elapsed { get; private set; }
         public int EnemyCount => spawner.AliveCount;
@@ -57,8 +63,10 @@ namespace RewindRampage
             player.Initialize(tuning);
             spawner.Initialize(tuning);
             recorder = new TrailRecorder(tuning);
-            damage = new TrailDamageSystem(tuning, spawner, OnKill);
-            rewind = new RewindController(tuning, player, recorder, damage, feedback, OnRewindFinished);
+            damage = new TrailDamageSystem(tuning, spawner, OnKill, OnExplosion);
+            intersections = new TrailIntersectionDetector(tuning, recorder, OnNodeCreated);
+            ghostNodes = new GhostNodeController(tuning, art, damage, feedback, OnNodeTriggered);
+            rewind = new RewindController(tuning, player, recorder, damage, feedback, intersections, ghostNodes, OnRewindFinished);
             BestScore = PlayerPrefs.GetInt("RewindRampage.BestScore", 0);
             player.ResetPlayer();
             recorder.Clear(player.Position, 0f);
@@ -80,6 +88,7 @@ namespace RewindRampage
 
             float effectDelta = State == SessionState.Paused ? 0f : Time.deltaTime;
             feedback.Tick(effectDelta);
+            ghostNodes.Tick(effectDelta, intersections.Nodes);
             hud.Tick(Time.unscaledDeltaTime);
         }
 
@@ -115,7 +124,7 @@ namespace RewindRampage
                     else
                     {
                         feedback.PlayDenied();
-                        hud.ShowNotice(rewind.CooldownRemaining > 0f ? "磁带冷却中，请稍候" : "先移动并录下至少 1 秒轨迹");
+                        hud.ShowNotice(rewind.CooldownRemaining > 0f ? "TAPE RECHARGING. KEEP MOVING." : "RECORD AT LEAST 1 SECOND OF MOVEMENT.");
                     }
                 }
             }
@@ -151,19 +160,41 @@ namespace RewindRampage
                 if (!player.TakeDamage(Elapsed)) continue;
                 enemy.PushAway(player.Position);
                 feedback.Hurt(player.Position);
-                hud.ShowNotice("信号受损！倒带期间无敌");
+                hud.ShowNotice("SIGNAL DAMAGED! REWIND TO BECOME INVULNERABLE.");
             }
         }
 
-        private void OnKill(Vector2 position, int reward, int combo)
+        private void OnKill(RewindKill kill)
         {
-            Score += reward;
+            Score += kill.Reward;
             TotalKills++;
-            BestCombo = Mathf.Max(BestCombo, combo);
-            BestRewindKills = Mathf.Max(BestRewindKills, combo);
-            feedback.Kill(position, reward, combo);
-            hud.ShowBurst(combo == 1 ? "REWIND KILL" : combo + "x COMBO",
-                "+" + reward + " / CHAIN THE SIGNAL", GameArt.Gold, 1.2f);
+            BestCombo = Mathf.Max(BestCombo, kill.Combo);
+            BestRewindKills = Mathf.Max(BestRewindKills, kill.Combo);
+            feedback.Kill(kill.Position, kill.Reward, kill.Combo);
+            hud.ShowBurst(kill.Combo == 1 ? "REWIND KILL" : kill.Combo + "x COMBO",
+                "+" + kill.Reward + " / CHAIN THE SIGNAL", GameArt.Gold, 1.2f);
+            if (kill.Source == DamageSource.VolatileExplosion)
+            {
+                TotalChainKills++;
+                hud.ShowChain(kill.ChainKills);
+            }
+        }
+
+        private void OnExplosion(ExplosionEvent explosion, int visualIndex)
+        {
+            feedback.ShowExplosion(explosion.Position, explosion.Radius, DamageSource.VolatileExplosion, Mathf.Min(0.25f, visualIndex * 0.045f));
+        }
+
+        private void OnNodeCreated(GhostNode node)
+        {
+            feedback.NodeCreated(node.Position);
+            hud.ShowNotice("DOUBLE EXPOSURE / REWIND THROUGH THE GOLD NODE TO DETONATE.");
+        }
+
+        private void OnNodeTriggered()
+        {
+            TotalGhostNodeTriggers++;
+            hud.ShowBurst("SPLICE BURST", "DOUBLE EXPOSURE DETONATED", GameArt.Gold, 1.1f);
         }
 
         private void OnRewindFinished(int kills, int points)
@@ -172,7 +203,7 @@ namespace RewindRampage
             if (kills > 0)
                 hud.ShowBurst(kills == 1 ? "REWIND KILL" : kills + "x COMBO", kills + " ELIMINATED / +" + points, GameArt.Gold, 1.5f);
             else
-                hud.ShowBurst("PLAY >", "引诱追踪者靠近蓝色轨迹，再倒带反击", GameArt.Cyan, 1.5f);
+                hud.ShowBurst("PLAY >", "LURE CHASERS ONTO YOUR RECORDED PATH, THEN REWIND.", GameArt.Cyan, 1.5f);
         }
 
         public void StartRun()
@@ -183,6 +214,7 @@ namespace RewindRampage
             player.ResetPlayer();
             Elapsed = 0f;
             Score = TotalKills = BestRewindKills = BestCombo = RewindCount = 0;
+            TotalGhostNodeTriggers = TotalChainKills = 0;
             Survived = false;
             recorder.Clear(player.Position, Elapsed);
             State = SessionState.Playing;
@@ -228,6 +260,12 @@ namespace RewindRampage
         private void OnApplicationFocus(bool focused)
         {
             if (!focused && State == SessionState.Playing) TogglePause();
+        }
+
+        private void OnDestroy()
+        {
+            damage?.Dispose();
+            intersections?.Dispose();
         }
     }
 }
