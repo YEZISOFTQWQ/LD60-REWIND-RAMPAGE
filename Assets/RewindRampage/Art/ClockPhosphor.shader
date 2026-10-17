@@ -1,6 +1,10 @@
 Shader "RewindRampage/ClockPhosphor"
 {
-    Properties { _GlowFalloff ("Phosphor falloff", Float) = 8.5 }
+    Properties
+    {
+        _GlowFalloff ("Phosphor falloff", Float) = 13
+        _GlowStrength ("Phosphor glow strength", Float) = 0.32
+    }
     SubShader
     {
         Tags { "Queue"="Transparent" "RenderType"="Transparent" "IgnoreProjector"="True" }
@@ -15,7 +19,7 @@ Shader "RewindRampage/ClockPhosphor"
             #include "UnityCG.cginc"
             struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; float4 shape : TEXCOORD1; fixed4 color : COLOR; };
             struct v2f { float4 vertex : SV_POSITION; float2 uv : TEXCOORD0; float4 shape : TEXCOORD1; float2 local : TEXCOORD2; fixed4 color : COLOR; };
-            float _GlowFalloff;
+            float _GlowFalloff, _GlowStrength;
             v2f vert(appdata v)
             {
                 v2f o; o.vertex = UnityObjectToClipPos(v.vertex);
@@ -46,7 +50,7 @@ Shader "RewindRampage/ClockPhosphor"
                 float scan = 0.91 + 0.09 * sin(i.vertex.y * 2.7 + _Time.y * 3.0);
                 float grain = frac(sin(dot(floor(i.vertex.xy) + floor(_Time.y * 12.0), float2(12.9898, 78.233))) * 43758.5453);
                 float tintStrength = max(i.color.r, max(i.color.g, i.color.b));
-                float3 radiance = i.color.rgb * (core * 1.2 + glow * 0.8) + filament * 0.8 * tintStrength;
+                float3 radiance = i.color.rgb * (core * 1.2 + glow * _GlowStrength) + filament * 0.45 * tintStrength;
                 return fixed4(radiance * scan * (0.95 + grain * 0.05), i.color.a);
             }
             ENDCG

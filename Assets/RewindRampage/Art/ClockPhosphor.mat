@@ -25,6 +25,7 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _GlowFalloff: 8.5
+    - _GlowFalloff: 13
+    - _GlowStrength: 0.32
     m_Colors: []
   m_BuildTextureStacks: []

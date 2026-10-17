@@ -18,6 +18,19 @@ namespace RewindRampage.Editor
         private static GameArt art;
         private static GameTuning tuning;
 
+        [MenuItem("Rewind Rampage/Upgrade to v0.4.5 - Softer clock glow")]
+        public static void UpgradeToV045()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before updating clock materials.");
+            art = AssetDatabase.LoadAssetAtPath<GameArt>(Root + "/Art/DemoArt.asset");
+            ClockTubeMaterial();
+            ClockLabelGlow("ClockLabel-Record", new Color(1f, 0.17f, 0.13f));
+            ClockLabelGlow("ClockLabel-Transport", new Color(0.54f, 0.91f, 1f));
+            PlayerSettings.bundleVersion = "0.4.5";
+            AssetDatabase.SaveAssets();
+            Debug.Log("REWIND RAMPAGE v0.4.5 saved: softer central clock glow and steady PLAY while playing, off during rewind/pause. No gameplay tests were run.");
+        }
+
         [MenuItem("Rewind Rampage/Upgrade scene to v0.4.4 - Phosphor clock HUD")]
         public static void UpgradeToV044()
         {
@@ -60,8 +73,7 @@ namespace RewindRampage.Editor
             item.transform.SetParent(clockRoot, false); item.transform.localPosition = Vector3.zero;
             ((RectTransform)item.transform).sizeDelta = new Vector2(26f, 5f);
             ArenaClockHud clock = item.GetComponent<ArenaClockHud>();
-            Material material = MaterialAsset("ClockPhosphor", "RewindRampage/ClockPhosphor");
-            material.SetFloat("_GlowFalloff", 8.5f); EditorUtility.SetDirty(material);
+            Material material = ClockTubeMaterial();
             Material redGlow = ClockLabelGlow("ClockLabel-Record", new Color(1f, 0.17f, 0.13f));
             Material iceGlow = ClockLabelGlow("ClockLabel-Transport", new Color(0.54f, 0.91f, 1f));
             Mesh mesh = clock.Author(art, material, redGlow, iceGlow, archive);
@@ -75,6 +87,14 @@ namespace RewindRampage.Editor
             EditorUtility.SetDirty(clock); EditorUtility.SetDirty(hud);
         }
 
+        private static Material ClockTubeMaterial()
+        {
+            Material material = MaterialAsset("ClockPhosphor", "RewindRampage/ClockPhosphor");
+            material.SetFloat("_GlowFalloff", 13f); material.SetFloat("_GlowStrength", 0.32f);
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
         private static Material ClockLabelGlow(string name, Color color)
         {
             string path = Root + "/Art/" + name + ".mat";
@@ -86,9 +106,9 @@ namespace RewindRampage.Editor
             }
             material.shader = Shader.Find("TextMeshPro/Distance Field");
             material.EnableKeyword("GLOW_ON");
-            color.a = 0.7f; material.SetColor("_GlowColor", color);
-            material.SetFloat("_GlowOffset", 0f); material.SetFloat("_GlowInner", 0.08f);
-            material.SetFloat("_GlowOuter", 0.4f); material.SetFloat("_GlowPower", 0.65f);
+            color.a = 0.32f; material.SetColor("_GlowColor", color);
+            material.SetFloat("_GlowOffset", 0f); material.SetFloat("_GlowInner", 0.04f);
+            material.SetFloat("_GlowOuter", 0.22f); material.SetFloat("_GlowPower", 0.65f);
             EditorUtility.SetDirty(material);
             return material;
         }

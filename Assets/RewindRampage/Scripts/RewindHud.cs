@@ -131,7 +131,7 @@ namespace RewindRampage
             switch (game.State)
             {
                 case SessionState.Title:
-                    view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4.4";
+                    view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4.5";
                     view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
                     view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
                     view.menuInstructions.text = TitleInstructions;
@@ -337,7 +337,8 @@ namespace RewindRampage
             bool reverse = game.Rewind.IsRewinding || (reconstructing && game.Duel.TransitionElapsed >= 2f && game.Duel.TransitionElapsed < 5f);
             bool hold = game.State == SessionState.Paused || game.StoryBooting || (game.InDuel && game.Duel.IsTransition && !reverse);
             bool active = game.State == SessionState.Playing || game.State == SessionState.Paused;
-            ClockLamps lamps = active ? reverse ? ClockLamps.Rew : game.Act == GameAct.Rec ? ClockLamps.Rec : ClockLamps.Play : ClockLamps.None;
+            ClockLamps lamps = active ? reverse ? ClockLamps.Rew : game.Act == GameAct.Rec ? ClockLamps.Rec : ClockLamps.None : ClockLamps.None;
+            if (game.State == SessionState.Playing && !reverse && !hold) lamps |= ClockLamps.Play;
             if (hold) lamps |= ClockLamps.Pause;
             bool locked = game.InArchive && game.Archive.Core.State != TimeCoreState.Dormant;
             view.arenaClock.Display(time, alarm, milliseconds, lamps, locked, clockVisibility, pulse);
@@ -477,7 +478,7 @@ namespace RewindRampage
 
         public void SetEnglishPreview()
         {
-            view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4.4";
+            view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4.5";
             view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
             view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
             view.menuInstructions.text = TitleInstructions;
@@ -493,7 +494,7 @@ namespace RewindRampage
             view.godModeLabel.text = "F2 / GOD MODE OFF";
             ClearStoryPresentation();
             view.notice.text = view.bannerTitle.text = view.bannerDetail.text = view.chainLabel.text = string.Empty;
-            view.nodeStatus.text = "REC / PLAYBACK / THE ARCHIVE / DEMO v0.4.4";
+            view.nodeStatus.text = "REC / PLAYBACK / THE ARCHIVE / DEMO v0.4.5";
         }
 
         public void SetArchivePreview()
