@@ -177,6 +177,13 @@ namespace RewindRampage
             if (count > 0) SetHistoryPoint(count - 1, recorder.CurrentPosition);
         }
 
+        public void SetCaptureHighlight(float strength)
+        {
+            Color start = GameArt.Cyan, end = GameArt.Cyan;
+            start.a = 0.01f + strength * 0.2f; end.a = 0.08f + strength * 0.2f;
+            historyGlow.startColor = start; historyGlow.endColor = end;
+        }
+
         private void SetHistoryPoint(int index, Vector2 position)
         {
             history.SetPosition(index, position);

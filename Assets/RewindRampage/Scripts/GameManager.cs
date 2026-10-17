@@ -15,6 +15,7 @@ namespace RewindRampage
         [SerializeField] private RewindHud hud;
         [SerializeField] private Camera arenaCamera;
         [SerializeField] private GameAct initialAct = GameAct.Rec;
+        [SerializeField] private Transform storyArena;
 
         private TrailRecorder recorder;
         private TrailDamageSystem damage;
@@ -24,6 +25,7 @@ namespace RewindRampage
         private RunRecorder runRecorder;
         private GhostDuelManager duel;
         private Act3Director archive;
+        private Act1StoryDirector story;
         private int lastWidth;
         private int lastHeight;
         private Vector2 movementStart;
@@ -52,7 +54,10 @@ namespace RewindRampage
         public int EnemyCount => spawner.AliveCount;
         public bool Survived { get; private set; }
         public bool Muted => feedback.Muted;
+        public bool StoryBooting => story != null && story.IsBooting;
+        public bool Invincible => player.Invincible;
         public void ConfigureEntryAct(GameAct entry) { initialAct = entry; }
+        public void ConfigureStoryArena(Transform arena) { storyArena = arena; }
 
         public void Configure(GameTuning settings, GameArt visuals, PlayerController playerController,
             EnemySpawner enemySpawner, FeedbackController effects, RewindHud view, Camera camera)
@@ -95,6 +100,7 @@ namespace RewindRampage
             recorder.Clear(player.Position, 0f);
             State = SessionState.Title;
             hud.Initialize(this);
+            story = new Act1StoryDirector(tuning, art, player, hud, feedback, storyArena);
             hud.ShowState();
             if (initialAct == GameAct.Archive) StartArchive();
         }
@@ -103,6 +109,7 @@ namespace RewindRampage
         {
             if (Screen.width != lastWidth || Screen.height != lastHeight) FitCamera();
             if (Input.GetKeyDown(KeyCode.M)) ToggleMute();
+            if (Input.GetKeyDown(KeyCode.F2)) ToggleInvincibility();
             if (State == SessionState.Title || State == SessionState.Results)
             {
                 if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return)) ActivatePrimary();
@@ -115,12 +122,19 @@ namespace RewindRampage
             ghostNodes.Tick(effectDelta, intersections.Nodes);
             archive.TickVisual(effectDelta);
             hud.Tick(Time.unscaledDeltaTime);
+            story.Present(State == SessionState.Playing ? Time.deltaTime : 0f, Elapsed, State == SessionState.Playing);
         }
 
         private void TickGame(float deltaTime)
         {
             if (InArchive) { TickArchive(deltaTime); return; }
             if (InDuel) { TickDuel(deltaTime); return; }
+            if (story.IsBooting)
+            {
+                story.TickBoot(deltaTime);
+                player.UpdateVisual(0f, false, 0f, false);
+                return;
+            }
             float previousTime = Elapsed;
             deltaTime = Mathf.Min(deltaTime, tuning.roundDuration - Elapsed);
             Elapsed += deltaTime;
@@ -175,6 +189,7 @@ namespace RewindRampage
             runRecorder.RecordFrame(player.Position, Elapsed, rewind.IsRewinding);
             if (player.Health <= 0) EndRun(false);
             else if (Elapsed >= tuning.roundDuration) BeginPlayback();
+            else story.Observe(Elapsed, recorder, RewindCount);
         }
 
         private void TickArchive(float deltaTime)
@@ -204,6 +219,7 @@ namespace RewindRampage
 
         public void StartArchive()
         {
+            story.Stop();
             duel.Reset(); runRecorder.ClearRecording(); archive.Reset();
             feedback.ResetFeedback(); rewind.Reset(); spawner.ResetEnemies();
             player.ResetPlayer(tuning.archivePlayerHealth);
@@ -251,6 +267,7 @@ namespace RewindRampage
         {
             RunRecording recording = runRecorder.StopRecording(player.Position, Elapsed, rewind.IsRewinding);
             rewind.Reset();
+            story.Stop(true);
             spawner.SetFrozenVisuals(true);
             Act = GameAct.Playback;
             duel.StartDuel(recording);
@@ -260,6 +277,7 @@ namespace RewindRampage
 
         private void PrepareDuelPlayer()
         {
+            story.Stop();
             feedback.ResetFeedback();
             rewind.Reset();
             spawner.ResetEnemies();
@@ -274,6 +292,8 @@ namespace RewindRampage
             if (duel.IsTransition)
             {
                 duel.TickTransition(deltaTime);
+                if (duel.State == GhostDuelState.TransitionIn)
+                    spawner.SetPresentationOpacity(1f - Mathf.Clamp01(duel.TransitionElapsed - 1f));
                 feedback.DrawHistory(recorder, false);
                 player.UpdateVisual(Elapsed, false, rewind.CooldownFraction, rewind.IsReady);
                 return;
@@ -393,6 +413,7 @@ namespace RewindRampage
             feedback.SetPaused(false);
             feedback.PlayStart();
             hud.ShowState();
+            story.Begin();
         }
 
         public void ActivatePrimary()
@@ -414,6 +435,7 @@ namespace RewindRampage
         public void RetryDuel()
         {
             if (duel.Recording == null) return;
+            story.Stop();
             Survived = false;
             State = SessionState.Playing;
             feedback.SetPaused(false);
@@ -439,9 +461,11 @@ namespace RewindRampage
         }
 
         public void ToggleMute() { feedback.ToggleMute(); }
+        public void ToggleInvincibility() { player.ToggleInvincibility(); }
 
         private void EndRun(bool survived)
         {
+            story.Stop();
             runRecorder.ClearRecording();
             Survived = survived;
             State = SessionState.Results;

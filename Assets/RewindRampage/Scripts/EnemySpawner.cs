@@ -138,5 +138,11 @@ namespace RewindRampage
             for (int i = 0; i < enemies.Count; i++)
                 if (enemies[i].IsAlive) enemies[i].UpdateVisual(frozen);
         }
+
+        public void SetPresentationOpacity(float opacity)
+        {
+            for (int i = 0; i < enemies.Count; i++)
+                if (enemies[i].IsAlive) enemies[i].SetPresentationOpacity(opacity);
+        }
     }
 }

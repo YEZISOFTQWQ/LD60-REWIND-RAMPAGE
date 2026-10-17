@@ -50,6 +50,17 @@ namespace RewindRampage
             public TextMeshProUGUI duelDetail;
             public TextMeshProUGUI duelTapeTime;
             public UnityEngine.UI.Button archiveEntry;
+            public TextMeshProUGUI roundTimeLabel;
+            public UnityEngine.UI.Button godMode;
+            public TextMeshProUGUI godModeLabel;
+            public GameObject bootOverlay;
+            public UnityEngine.UI.Image bootBackdrop;
+            public TextMeshProUGUI bootTerminal;
+            public TextMeshProUGUI bootHeadline;
+            public CanvasGroup[] bootFades;
+            public TextMeshProUGUI storyMessage;
+            public TextMeshProUGUI storyCapture;
+            public UnityEngine.UI.Image[] storyEdges;
         }
 
         [SerializeField] private References view;
@@ -68,6 +79,8 @@ namespace RewindRampage
         private string previousHint;
         private string previousAbility;
         private float chainRemaining;
+        private float storyRemaining, storyDuration;
+        private Vector2 timerOrigin, modeOrigin;
 
         public void Configure(References references) { view = references; }
 
@@ -78,6 +91,9 @@ namespace RewindRampage
             view.restart.onClick.AddListener(game.SecondaryAction);
             view.archiveEntry.onClick.AddListener(Act3TestEntry.LoadArchive);
             view.mute.onClick.AddListener(game.ToggleMute);
+            view.godMode.onClick.AddListener(game.ToggleInvincibility);
+            timerOrigin = view.timer.rectTransform.anchoredPosition;
+            modeOrigin = view.recordState.rectTransform.anchoredPosition;
             previousHealth = game.Player.Health;
         }
 
@@ -107,7 +123,7 @@ namespace RewindRampage
             switch (game.State)
             {
                 case SessionState.Title:
-                    view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4.1";
+                    view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4.2";
                     view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
                     view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
                     view.menuInstructions.text = TitleInstructions;
@@ -168,16 +184,19 @@ namespace RewindRampage
                 displayedScore = game.Score;
                 view.score.SetText("{0:000000}", game.Score);
             }
-            float timeLeft = game.InArchive ? game.Archive.Remaining : game.InDuel ? game.Duel.Remaining : game.Tuning.roundDuration - game.Elapsed;
-            if (game.InDuel && game.Duel.State == GhostDuelState.TransitionIn)
-                timeLeft = game.Tuning.roundDuration * (1f - game.Duel.TransitionProgress);
-            int seconds = Mathf.CeilToInt(Mathf.Max(0f, timeLeft));
+            float displayTime = game.InArchive ? game.Archive.Remaining : game.InDuel ? game.Duel.DuelTime : game.Elapsed;
+            bool reconstructing = game.InDuel && game.Duel.State == GhostDuelState.TransitionIn;
+            if (reconstructing) displayTime = game.Duel.TransitionElapsed < 6f ? game.Tuning.roundDuration : 0f;
+            int seconds = game.InArchive ? Mathf.CeilToInt(Mathf.Max(0f, displayTime)) : Mathf.FloorToInt(Mathf.Max(0f, displayTime));
+            view.roundTimeLabel.text = game.InArchive ? "TIME LEFT" : "ELAPSED TIME";
             if (seconds != displayedSeconds)
             {
                 displayedSeconds = seconds;
                 view.timer.text = (seconds / 60).ToString("00") + ":" + (seconds % 60).ToString("00");
-                view.timer.color = seconds <= 15 ? GameArt.Red : GameArt.White;
             }
+            bool finalSeconds = !game.InDuel && !game.InArchive && game.Elapsed >= 85f && game.State == SessionState.Playing;
+            view.timer.color = game.InArchive ? seconds <= 15 ? GameArt.Red : GameArt.White : finalSeconds
+                ? Color.Lerp(GameArt.Red, Color.white, Mathf.PingPong(game.Elapsed * 4f, 1f)) : GameArt.White;
             int hostileCount = game.InArchive ? game.Archive.EchoCount : game.InDuel ? game.Duel.Boss.Health : game.EnemyCount;
             if (game.InArchive || hostileCount != displayedEnemies)
             {
@@ -207,6 +226,16 @@ namespace RewindRampage
             Color dotColor = rewinding ? GameArt.Gold : GameArt.Red;
             dotColor.a = 0.5f + 0.5f * Mathf.Abs(Mathf.Sin(uiTime * 3f));
             view.recordDot.color = dotColor;
+            bool finalCapture = !game.InArchive && ((!game.InDuel && game.Elapsed >= 60f) || (reconstructing && game.Duel.TransitionElapsed < 6f));
+            if (finalCapture)
+            {
+                view.recordState.text = "REC";
+                view.recordState.color = GameArt.Red;
+                dotColor = GameArt.Red;
+                dotColor.a = reconstructing ? 1f : 0.35f + 0.65f * Mathf.Abs(Mathf.Sin(game.Elapsed * 5f));
+                view.recordDot.color = dotColor;
+            }
+            else view.recordState.text = mode;
 
             float tapeFraction = Mathf.Clamp01(game.Recorder.Duration / game.Tuning.recordDuration);
             for (int i = 0; i < view.tapeSegments.Length; i++)
@@ -221,15 +250,11 @@ namespace RewindRampage
             float reelSpeed = rewinding ? -800f : game.State == SessionState.Playing ? 65f : 12f;
             for (int i = 0; i < view.reels.Length; i++) view.reels[i].Rotate(0f, 0f, reelSpeed * deltaTime);
 
-            int phase = game.Elapsed < 15f ? 0 : game.Elapsed < 25f ? 1 : game.Elapsed < 45f ? 2 : game.Elapsed < 65f ? 3 : 4;
+            int phase = game.Elapsed < 30f ? 0 : game.Elapsed < 60f ? 1 : game.Elapsed < 80f ? 2 : 3;
             if (!game.InDuel && !game.InArchive && phase != lastPhase)
             {
                 lastPhase = phase;
-                view.phase.text = new[] { "ACT I / REC / LEARN THE TAPE", "ACT I / DOUBLE EXPOSURE", "ACT I / VOLATILE SIGNALS", "ACT I / CHAIN REACTION", "ACT I / FINAL TRANSMISSION" }[phase];
-                if (game.State == SessionState.Playing && phase == 1 && game.Tuning.enableGhostNodes)
-                    ShowNotice("DOUBLE EXPOSURE ONLINE / CROSS YOUR TRAIL TO PLANT A GOLD NODE.");
-                if (game.State == SessionState.Playing && phase == 2 && game.Tuning.enableVolatileEnemies)
-                    ShowNotice("VOLATILE SIGNALS ONLINE / ORANGE HEXAGONS EXPLODE ON DEATH.");
+                view.phase.text = new[] { "ACT I / RECORD / OBSERVATION", "ACT I / INCREASING PRESSURE", "ACT I / FINAL RECORDING", "ACT I / BUFFER SATURATION" }[phase];
             }
             if (game.InDuel) view.phase.text = "ACT II / PLAYBACK / FINAL 30 SECONDS";
             if (game.InArchive) view.phase.text = ArchivePhases[game.Archive.Phase];
@@ -263,7 +288,10 @@ namespace RewindRampage
                 else view.nodeStatus.SetText("NODES {0} / TIME CORE HP {1}/3", game.GhostNodeCount, game.Archive.Core.Health);
             }
             else if (game.InDuel)
-                view.nodeStatus.SetText("NODES {0} / REPLAY {1:0.0}s / 1x SPEED", game.GhostNodeCount, game.Duel.ReplayTime);
+            {
+                if (game.Duel.IsTransition) view.nodeStatus.text = "FINAL CAPTURE / TEMPORAL DATA SECURED";
+                else view.nodeStatus.SetText("NODES {0} / REPLAY {1:0.0}s / 1x SPEED", game.GhostNodeCount, game.Duel.ReplayTime);
+            }
             else if (game.Tuning.enableGhostNodes && game.Elapsed < game.Tuning.ghostNodeUnlockTime)
                 view.nodeStatus.SetText("DOUBLE EXPOSURE IN {0}s", Mathf.Ceil(game.Tuning.ghostNodeUnlockTime - game.Elapsed));
             else if (game.Tuning.enableVolatileEnemies && game.Elapsed < game.Tuning.volatileUnlockTime)
@@ -275,6 +303,13 @@ namespace RewindRampage
             chainRemaining = Mathf.Max(0f, chainRemaining - deltaTime);
             view.chainLabel.alpha = Mathf.Clamp01(chainRemaining * 4f);
             TickDuelPresentation();
+            float storyDelta = game.State == SessionState.Playing ? deltaTime : 0f;
+            storyRemaining = Mathf.Max(0f, storyRemaining - storyDelta);
+            view.storyMessage.alpha = Mathf.Clamp01(storyRemaining * 3f);
+            view.storyMessage.maxVisibleCharacters = Mathf.FloorToInt((storyDuration - storyRemaining) * 75f);
+            view.godModeLabel.text = game.Invincible ? "F2 / GOD MODE ON" : "F2 / GOD MODE OFF";
+            view.godModeLabel.color = game.Invincible ? GameArt.Gold : GameArt.Muted;
+            view.bootOverlay.SetActive(game.StoryBooting && game.State == SessionState.Playing);
         }
 
         private void TickDuelPresentation()
@@ -282,17 +317,82 @@ namespace RewindRampage
             bool visible = game.InDuel && game.State == SessionState.Playing && game.Duel.IsTransition;
             view.duelOverlay.SetActive(visible);
             view.scanlines.color = game.InDuel || game.InArchive ? new Color(1f, 1f, 1f, 0.35f) : Color.white;
-            if (!visible) return;
+            if (!visible)
+            {
+                if (game.InDuel && !game.Duel.IsTransition) SetStoryEffects(false, 0f, 0f);
+                return;
+            }
             GhostDuelState state = game.Duel.State;
-            view.duelTitle.text = state == GhostDuelState.TransitionIn ? "END OF TAPE" : "DUPLICATE SUBJECT DETECTED";
-            view.duelDetail.text = state == GhostDuelState.TransitionIn ? "SEEKING THE FINAL 30 SECONDS..." : "ERASE YOUR PAST";
+            float time = game.Duel.TransitionElapsed;
+            view.duelTitle.text = state != GhostDuelState.TransitionIn ? "DUPLICATE SUBJECT DETECTED" : time < 1f ? "RECORDING COMPLETE."
+                : time < 6f ? string.Empty : "ELIMINATE THE PREVIOUS INSTANCE.";
+            view.duelDetail.text = state != GhostDuelState.TransitionIn ? "ERASE YOUR PAST" : time < 1f ? string.Empty : time < 2f
+                ? "> TEMPORAL DATA SECURED.\n> RECONSTRUCTING SUBJECT..." : time < 5f
+                ? "> REWINDING SUBJECT DATA...\n> T-30.00 SEC" : time < 6f
+                ? "> OPERATOR INSTANCE CREATED.\n> DUPLICATE IDENTITY DETECTED." : "TARGET ACQUIRED / PLAYBACK STANDING BY";
             float tapeTime = state == GhostDuelState.TransitionIn ? Mathf.Lerp(game.Duel.Recording.Duration,
                 game.Duel.ReplayStart, game.Duel.TransitionProgress) : game.Duel.ReplayTime;
             int seconds = Mathf.FloorToInt(tapeTime);
             view.duelTapeTime.text = (seconds / 60).ToString("00") + ":" + (seconds % 60).ToString("00");
-            float black = state == GhostDuelState.TransitionIn && game.Duel.TransitionProgress > 0.9f ? 1f : state == GhostDuelState.Preparing ? 0.55f : 0.2f;
+            float black = state == GhostDuelState.Preparing ? 0.4f : time >= 2f && time < 6f ? 0.03f : 0.2f;
             view.duelBackdrop.color = new Color(0.008f, 0.008f, 0.02f, black);
             view.trackingBar.rectTransform.anchoredPosition = new Vector2(0f, Mathf.PingPong(uiTime * 1300f, 1000f) - 500f);
+            if (state == GhostDuelState.TransitionIn)
+            {
+                SetStoryEffects(true, time >= 6f && time < 6.3f ? 0.3f : 0f, time >= 6f && time < 6.2f ? 0.2f : 0f);
+                view.storyCapture.text = time < 6f ? "REC / RECORDING COMPLETE" : "PLAYBACK / FINAL 30 SECONDS";
+                if (time >= 5f && time < 5.2f) view.flash.color = new Color(1f, 1f, 1f, (5.2f - time) * 3.5f);
+            }
+            else SetStoryEffects(false, 0f, 0f);
+        }
+
+        public void SetBootPresentation(float time)
+        {
+            view.bootOverlay.SetActive(game == null || game.State == SessionState.Playing);
+            view.bootBackdrop.color = new Color(0f, 0f, 0f, 1f - Mathf.Clamp01((time - 0.35f) / 1.6f));
+            view.bootTerminal.text = time < 0.8f ? "> TEMPORAL OBSERVATION SYSTEM" : time < 1.6f
+                ? "> TEMPORAL OBSERVATION SYSTEM\n> INITIALIZING SUBJECT..." : time < 2.4f
+                ? "> TEMPORAL OBSERVATION SYSTEM\n> INITIALIZING SUBJECT...\n> SUBJECT DETECTED."
+                : "> SUBJECT DETECTED.\n> BEGINNING RECOVERY TEST.";
+            view.bootTerminal.alpha = time < 3.8f ? 1f : Mathf.Clamp01((4.5f - time) / 0.7f);
+            view.bootHeadline.text = time >= 3f ? "SURVIVE FOR 90 SECONDS." : string.Empty;
+            view.bootHeadline.alpha = Mathf.Clamp01((4.5f - time) / 0.5f);
+            foreach (CanvasGroup group in view.bootFades) group.alpha = Mathf.Clamp01((time - 1.7f) / 1.3f);
+        }
+
+        public void HideBootPresentation()
+        {
+            view.bootOverlay.SetActive(false);
+            foreach (CanvasGroup group in view.bootFades) group.alpha = 1f;
+        }
+
+        public void ShowStoryMessage(string message, float duration)
+        {
+            storyRemaining = storyDuration = duration;
+            view.storyMessage.text = message;
+            view.storyMessage.maxVisibleCharacters = 0;
+        }
+
+        public void SetStoryEffects(bool capturing, float pulse, float glitch)
+        {
+            view.storyCapture.text = capturing ? "REC / FINAL CAPTURE WINDOW" : string.Empty;
+            view.storyCapture.alpha = capturing ? 1f : 0f;
+            float alpha = capturing ? 0.4f : 0f;
+            Color edge = new Color(1f, 0.15f, 0.3f, Mathf.Max(alpha, Mathf.Clamp01(pulse * 2f)));
+            foreach (UnityEngine.UI.Image image in view.storyEdges) image.color = edge;
+            float shift = glitch > 0f ? Mathf.Sin(uiTime * 107f) * 4f : 0f;
+            if (game != null)
+            {
+                view.timer.rectTransform.anchoredPosition = timerOrigin + new Vector2(shift, 0f);
+                view.recordState.rectTransform.anchoredPosition = modeOrigin + new Vector2(-shift, 0f);
+            }
+        }
+
+        public void ClearStoryPresentation()
+        {
+            HideBootPresentation(); storyRemaining = 0f;
+            view.storyMessage.text = string.Empty;
+            SetStoryEffects(false, 0f, 0f);
         }
 
         public void ShowBurst(string title, string detail, Color color, float duration)
@@ -325,7 +425,7 @@ namespace RewindRampage
 
         public void SetEnglishPreview()
         {
-            view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4.1";
+            view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4.2";
             view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
             view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
             view.menuInstructions.text = TitleInstructions;
@@ -333,8 +433,13 @@ namespace RewindRampage
             view.instructions.text = "WASD TO RECORD A PATH. LURE THE RED CHASERS BEHIND YOU.";
             view.primaryLabel.text = "PLAY TAPE  >  [ SPACE ]";
             view.enemyCount.text = "HOSTILES  00";
+            view.timer.text = "00:00";
+            view.roundTimeLabel.text = "ELAPSED TIME";
+            view.phase.text = "ACT I / RECORD / OBSERVATION";
+            view.godModeLabel.text = "F2 / GOD MODE OFF";
+            ClearStoryPresentation();
             view.notice.text = view.bannerTitle.text = view.bannerDetail.text = view.chainLabel.text = string.Empty;
-            view.nodeStatus.text = "REC / PLAYBACK / THE ARCHIVE / DEMO v0.4.1";
+            view.nodeStatus.text = "REC / PLAYBACK / THE ARCHIVE / DEMO v0.4.2";
         }
 
         public void SetArchivePreview()
@@ -345,6 +450,7 @@ namespace RewindRampage
             view.phase.text = ArchivePhases[0];
             view.recordState.text = "ARCHIVE";
             view.timer.text = "01:30";
+            view.roundTimeLabel.text = "TIME LEFT";
             view.enemyCount.text = "ECHOES 2/2 / REWINDING 0";
             view.nodeStatus.text = "CORE ONLINE AT 00:30";
             view.instructions.text = "DODGE LOCKED RED PATHS. BREAK THE CORE, THEN SURVIVE TO 00:00.";
@@ -357,6 +463,7 @@ namespace RewindRampage
             view.restart.onClick.RemoveListener(game.SecondaryAction);
             view.archiveEntry.onClick.RemoveListener(Act3TestEntry.LoadArchive);
             view.mute.onClick.RemoveListener(game.ToggleMute);
+            view.godMode.onClick.RemoveListener(game.ToggleInvincibility);
         }
     }
 }

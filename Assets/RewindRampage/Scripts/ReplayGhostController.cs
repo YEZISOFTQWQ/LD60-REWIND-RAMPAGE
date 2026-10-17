@@ -43,6 +43,8 @@ namespace RewindRampage
         private RunRecording recording;
         private int frameCursor;
         private float clipStart, clipEnd, flashRemaining, visualTime;
+        private float presentationOpacity = 1f;
+        private bool targetLocked;
         public Vector2 Position => root.position;
         public bool IsRewinding { get; private set; }
         public bool IsWarning { get; set; }
@@ -66,6 +68,7 @@ namespace RewindRampage
             recording = source;
             flashRemaining = visualTime = 0f;
             IsWarning = IsFrozen = false;
+            presentationOpacity = 1f; targetLocked = false;
             root.gameObject.SetActive(true);
             JumpToClip(start, end);
         }
@@ -103,7 +106,7 @@ namespace RewindRampage
 
         public void ShowTapeFlashback(float progress, float destinationTime)
         {
-            clipStart = 0f; clipEnd = recording.Duration;
+            clipStart = destinationTime; clipEnd = recording.Duration;
             SetReplayTime(Mathf.Lerp(recording.Duration, destinationTime, progress));
             future.positionCount = 0;
         }
@@ -119,6 +122,18 @@ namespace RewindRampage
             ring.color = color;
             color.a = IsRewinding ? 0.5f : 0.25f;
             halo.color = color;
+            color = body.color; color.a *= presentationOpacity; body.color = color;
+            color = halo.color; color.a *= presentationOpacity; halo.color = color;
+            color = ring.color; color.a *= presentationOpacity; ring.color = color;
+            ring.transform.localScale = Vector3.one * (targetLocked ? 1.8f : 1.45f);
+            history.startColor = history.endColor = new Color(0.5f, 0.12f, 0.45f, 0.4f * presentationOpacity);
+            future.startColor = future.endColor = new Color(1f, 0.4f, 0.75f, 0.35f * presentationOpacity);
+        }
+
+        public void SetPresentationOpacity(float opacity, bool locked = false)
+        {
+            presentationOpacity = Mathf.Clamp01(opacity); targetLocked = locked;
+            TickVisual(0f);
         }
 
         public void FlashHit() { flashRemaining = 0.2f; }

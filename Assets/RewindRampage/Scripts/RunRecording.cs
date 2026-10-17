@@ -39,13 +39,36 @@ namespace RewindRampage
         public ReadOnlyCollection<ReplayFrame> Frames { get; }
         public ReadOnlyCollection<ReplayAttackSegment> Attacks { get; }
         public ReadOnlyCollection<ReplayNodeBurst> NodeBursts { get; }
+        public ReadOnlyDictionary<int, float> ActionStartTimes { get; }
         public float Duration => Frames.Count == 0 ? 0f : Frames[Frames.Count - 1].Time;
 
-        public RunRecording(List<ReplayFrame> frames, List<ReplayAttackSegment> attacks, List<ReplayNodeBurst> bursts)
+        public RunRecording(List<ReplayFrame> frames, List<ReplayAttackSegment> attacks, List<ReplayNodeBurst> bursts, float captureStart = 0f)
         {
-            Frames = System.Array.AsReadOnly(frames.ToArray());
-            Attacks = System.Array.AsReadOnly(attacks.ToArray());
-            NodeBursts = System.Array.AsReadOnly(bursts.ToArray());
+            List<ReplayFrame> capturedFrames = new List<ReplayFrame>();
+            if (frames.Count > 0)
+            {
+                captureStart = Mathf.Clamp(captureStart, frames[0].Time, frames[frames.Count - 1].Time);
+                int boundary = 0;
+                while (boundary + 1 < frames.Count && frames[boundary + 1].Time <= captureStart) boundary++;
+                ReplayFrame a = frames[boundary], b = frames[Mathf.Min(boundary + 1, frames.Count - 1)];
+                capturedFrames.Add(new ReplayFrame(captureStart,
+                    Vector2.Lerp(a.Position, b.Position, Mathf.InverseLerp(a.Time, b.Time, captureStart)), a.IsRewinding));
+                for (int i = boundary + 1; i < frames.Count; i++)
+                    if (frames[i].Time > captureStart) capturedFrames.Add(frames[i]);
+            }
+            Dictionary<int, float> actionStarts = new Dictionary<int, float>();
+            List<ReplayAttackSegment> capturedAttacks = new List<ReplayAttackSegment>();
+            foreach (ReplayAttackSegment attack in attacks)
+            {
+                if (!actionStarts.ContainsKey(attack.ActionId)) actionStarts.Add(attack.ActionId, attack.Time);
+                if (attack.Time >= captureStart) capturedAttacks.Add(attack);
+            }
+            List<ReplayNodeBurst> capturedBursts = new List<ReplayNodeBurst>();
+            foreach (ReplayNodeBurst burst in bursts) if (burst.Time >= captureStart) capturedBursts.Add(burst);
+            Frames = System.Array.AsReadOnly(capturedFrames.ToArray());
+            Attacks = System.Array.AsReadOnly(capturedAttacks.ToArray());
+            NodeBursts = System.Array.AsReadOnly(capturedBursts.ToArray());
+            ActionStartTimes = new ReadOnlyDictionary<int, float>(actionStarts);
         }
 
         public int FindFrame(float time)

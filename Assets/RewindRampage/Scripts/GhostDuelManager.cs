@@ -8,7 +8,7 @@ namespace RewindRampage
     public sealed class GhostDuelManager : IDisposable
     {
         public const float Duration = 30f;
-        private readonly GameTuning tuning;
+        public const float ReconstructionDuration = 8f;
         private readonly PlayerController player;
         private readonly FeedbackController feedback;
         private readonly Action preparePlayer;
@@ -16,6 +16,7 @@ namespace RewindRampage
         private readonly ReplayGhostController ghost;
         private readonly ReplayAttackController attacks;
         private float transitionRemaining;
+        private bool reconstructionPrepared, reverseStarted, duplicateRevealed;
         public GhostBossHealth Boss { get; }
         public RunRecording Recording { get; private set; }
         public GhostDuelState State { get; private set; }
@@ -24,13 +25,14 @@ namespace RewindRampage
         public float ReplayStart { get; private set; }
         public float Remaining => Mathf.Max(0f, Duration - DuelTime);
         public bool IsTransition => State == GhostDuelState.TransitionIn || State == GhostDuelState.Preparing;
-        public float TransitionProgress => State == GhostDuelState.TransitionIn ? 1f - transitionRemaining / tuning.tapeRewindTransition : 0f;
+        public float TransitionElapsed => State == GhostDuelState.TransitionIn ? ReconstructionDuration - transitionRemaining : 0f;
+        public float TransitionProgress => Mathf.Clamp01((TransitionElapsed - 2f) / 3f);
         public Vector2 GhostPosition => ghost.Position;
 
         public GhostDuelManager(GameTuning tuning, GameArt art, PlayerController player, FeedbackController feedback,
             Action preparePlayer, Action onBossHit, Action onPlayerHit, Action<bool> onFinished)
         {
-            this.tuning = tuning; this.player = player; this.feedback = feedback;
+            this.player = player; this.feedback = feedback;
             this.preparePlayer = preparePlayer; this.onFinished = onFinished;
             ghost = new ReplayGhostController(art, feedback.transform);
             attacks = new ReplayAttackController(tuning, art, player, feedback, onPlayerHit);
@@ -53,22 +55,26 @@ namespace RewindRampage
             if (rewindTransition)
             {
                 State = GhostDuelState.TransitionIn;
-                transitionRemaining = tuning.tapeRewindTransition;
+                transitionRemaining = ReconstructionDuration;
+                reconstructionPrepared = reverseStarted = duplicateRevealed = false;
                 ghost.ShowTapeFlashback(0f, ReplayStart);
-                feedback.PlayTapeTransition();
+                ghost.SetPresentationOpacity(0f);
             }
             else Prepare();
         }
 
-        private void Prepare()
+        private void Prepare(bool reconstruction = false)
         {
             feedback.StopRewind();
             preparePlayer();
             Boss.ResetHealth();
             ghost.Initialize(Recording, ReplayStart, Recording.Duration);
             attacks.Initialize(Recording, ReplayStart, Recording.Duration);
-            State = GhostDuelState.Preparing;
-            transitionRemaining = 1.1f;
+            if (!reconstruction)
+            {
+                State = GhostDuelState.Preparing;
+                transitionRemaining = 1.1f;
+            }
         }
 
         public void TickTransition(float deltaTime)
@@ -76,10 +82,24 @@ namespace RewindRampage
             if (!IsTransition) return;
             transitionRemaining = Mathf.Max(0f, transitionRemaining - deltaTime);
             ghost.TickVisual(deltaTime);
-            if (State == GhostDuelState.TransitionIn) ghost.ShowTapeFlashback(TransitionProgress, ReplayStart);
+            if (State == GhostDuelState.TransitionIn)
+            {
+                float time = TransitionElapsed;
+                if (time >= 2f && !reverseStarted) { reverseStarted = true; feedback.PlayTapeTransition(); }
+                if (time >= 2f && time < 5f) ghost.ShowTapeFlashback(TransitionProgress, ReplayStart);
+                if (time >= 5f && !duplicateRevealed)
+                {
+                    duplicateRevealed = true;
+                    feedback.StopRewind();
+                    ghost.JumpToClip(ReplayStart, Recording.Duration);
+                    ghost.FlashHit();
+                }
+                if (time >= 6f && !reconstructionPrepared) { reconstructionPrepared = true; Prepare(true); }
+                ghost.SetPresentationOpacity(time < 2f ? 0f : time < 5f ? 0.4f : Mathf.Lerp(0.4f, 1f, time - 5f), time >= 6f);
+            }
             if (transitionRemaining > 0f) return;
-            if (State == GhostDuelState.TransitionIn) Prepare();
-            else State = GhostDuelState.Fighting;
+            ghost.SetPresentationOpacity(1f);
+            State = GhostDuelState.Fighting;
         }
 
         public void SetPlayerClock(float time) { Boss.SetClock(time); }

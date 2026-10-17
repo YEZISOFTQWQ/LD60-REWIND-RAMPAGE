@@ -55,7 +55,7 @@ namespace RewindRampage.Editor
             PlayerSettings.WebGL.memorySize = 256;
             PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.ExplicitlyThrownExceptionsOnly;
             PlayerSettings.SetIl2CppCompilerConfiguration(BuildTargetGroup.WebGL, Il2CppCompilerConfiguration.Release);
-            PlayerSettings.bundleVersion = "0.4.1";
+            PlayerSettings.bundleVersion = "0.4.2";
             EditorUserBuildSettings.development = false;
 
             BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions

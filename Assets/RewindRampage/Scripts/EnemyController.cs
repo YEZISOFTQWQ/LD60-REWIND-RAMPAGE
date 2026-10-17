@@ -103,5 +103,12 @@ namespace RewindRampage
             health = 0;
             gameObject.SetActive(false);
         }
+
+        public void SetPresentationOpacity(float opacity)
+        {
+            Color color = body.color; color.a = opacity; body.color = color;
+            color = core.color; color.a = opacity; core.color = color;
+            color = halo.color; color.a = opacity * 0.22f; halo.color = color;
+        }
     }
 }

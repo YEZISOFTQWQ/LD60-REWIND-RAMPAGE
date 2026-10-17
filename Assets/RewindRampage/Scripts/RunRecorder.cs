@@ -63,7 +63,9 @@ namespace RewindRampage
         {
             RecordFrame(position, time, rewinding, true);
             IsRecording = false;
-            return new RunRecording(frames, attacks, bursts);
+            // Keep only the real final capture window. Pre-window action start times
+            // survive as metadata so cropped, untelegraphed attacks remain harmless.
+            return new RunRecording(frames, attacks, bursts, Mathf.Max(0f, time - GhostDuelManager.Duration));
         }
 
         public void ClearRecording()

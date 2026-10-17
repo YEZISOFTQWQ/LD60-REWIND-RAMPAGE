@@ -49,7 +49,6 @@ MonoBehaviour:
   ghostBossHealth: 2
   ghostBossRadius: 0.85
   ghostBossInvulnerability: 0.7
-  tapeRewindTransition: 1.8
   replayWarningLead: 0.5
   replayClipProtection: 0.5
   archivePlayerHealth: 3

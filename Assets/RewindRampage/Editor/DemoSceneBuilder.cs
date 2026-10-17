@@ -18,6 +18,109 @@ namespace RewindRampage.Editor
         private static GameArt art;
         private static GameTuning tuning;
 
+        [MenuItem("Rewind Rampage/Upgrade scene to v0.4.2 - Act I story")]
+        public static void UpgradeToV042()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before upgrading the scenes.");
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            art = AssetDatabase.LoadAssetAtPath<GameArt>(Root + "/Art/DemoArt.asset");
+            string[] paths = { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/Act3.unity" };
+            foreach (string path in paths)
+            {
+                Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                GameManager manager = null; RewindHud hud = null; Transform arena = null;
+                foreach (GameObject root in scene.GetRootGameObjects())
+                {
+                    if (manager == null) manager = root.GetComponentInChildren<GameManager>(true);
+                    if (hud == null) hud = root.GetComponentInChildren<RewindHud>(true);
+                    if (root.name == "Arena - dark signal grid") arena = root.transform;
+                }
+                if (manager == null || hud == null || arena == null) throw new InvalidOperationException("Existing scene composition is incomplete: " + path);
+                EnsureStoryPresentation(hud);
+                manager.ConfigureStoryArena(arena);
+                if (path == paths[1]) hud.SetArchivePreview(); else hud.SetEnglishPreview();
+                EditorUtility.SetDirty(manager); EditorUtility.SetDirty(hud);
+                EditorSceneManager.SaveScene(scene, path);
+            }
+            PlayerSettings.bundleVersion = "0.4.2";
+            tuning = AssetDatabase.LoadAssetAtPath<GameTuning>(Root + "/Settings/DemoTuning.asset");
+            EditorUtility.SetDirty(tuning);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.ForceReserializeAssets(new[] { Root + "/Settings/DemoTuning.asset" });
+            EditorSceneManager.OpenScene(paths[0], OpenSceneMode.Single);
+            Debug.Log("REWIND RAMPAGE v0.4.2 saved: Act I story, eight-second reconstruction, count-up clocks and opt-in F2 god mode. No gameplay tests were run.");
+        }
+
+        private static void EnsureStoryPresentation(RewindHud hud)
+        {
+            SerializedObject serializedHud = new SerializedObject(hud);
+            SerializedProperty view = serializedHud.FindProperty("view");
+            GameObject menu = (GameObject)view.FindPropertyRelative("menu").objectReferenceValue;
+            GameObject duel = (GameObject)view.FindPropertyRelative("duelOverlay").objectReferenceValue;
+            Transform story = hud.transform.Find("Act I story layer");
+            if (story == null) { story = Rect("Act I story layer", hud.transform, Vector2.zero, Vector2.zero, Vector2.zero); Stretch((RectTransform)story); }
+            story.SetSiblingIndex(menu.transform.GetSiblingIndex());
+            TextMeshProUGUI message = EnsureLabel("Observation terminal", story, new Vector2(0.5f, 1f), new Vector2(0f, -154f),
+                new Vector2(1200f, 80f), string.Empty, 17f, GameArt.Cyan);
+            message.lineSpacing = 5f;
+            TextMeshProUGUI capture = EnsureLabel("Final capture indicator", story, new Vector2(0f, 1f), new Vector2(64f, -137f),
+                new Vector2(420f, 24f), string.Empty, 13f, GameArt.Red);
+            capture.alignment = TextAlignmentOptions.Left;
+            UnityEngine.UI.Image[] edges =
+            {
+                StoryEdge(story, "Capture top", new Vector2(0f, 1f), Vector2.one, new Vector2(10f, -12f), new Vector2(-10f, -10f)),
+                StoryEdge(story, "Capture bottom", Vector2.zero, new Vector2(1f, 0f), new Vector2(10f, 10f), new Vector2(-10f, 12f)),
+                StoryEdge(story, "Capture left", Vector2.zero, new Vector2(0f, 1f), new Vector2(10f, 10f), new Vector2(12f, -10f)),
+                StoryEdge(story, "Capture right", new Vector2(1f, 0f), Vector2.one, new Vector2(-12f, 10f), new Vector2(-10f, -10f))
+            };
+            Transform boot = hud.transform.Find("Act I boot");
+            if (boot == null) { boot = Rect("Act I boot", hud.transform, Vector2.zero, Vector2.zero, Vector2.zero); Stretch((RectTransform)boot); }
+            Transform blackTransform = boot.Find("Blackout");
+            UnityEngine.UI.Image black = blackTransform != null ? blackTransform.GetComponent<UnityEngine.UI.Image>()
+                : Box("Blackout", boot, Vector2.zero, Vector2.zero, Vector2.zero, Color.black);
+            Stretch(black.rectTransform);
+            TextMeshProUGUI terminal = EnsureLabel("Boot terminal", boot, new Vector2(0.5f, 0.5f), new Vector2(0f, 100f),
+                new Vector2(1300f, 150f), string.Empty, 24f, GameArt.Cyan);
+            terminal.lineSpacing = 12f;
+            TextMeshProUGUI headline = EnsureLabel("Recovery instruction", boot, new Vector2(0.5f, 0.5f), new Vector2(0f, -78f),
+                new Vector2(1400f, 70f), string.Empty, 34f, GameArt.White);
+            boot.SetAsLastSibling(); boot.gameObject.SetActive(false);
+            Transform godTransform = hud.transform.Find("God mode toggle");
+            UnityEngine.UI.Button god = godTransform != null ? godTransform.GetComponent<UnityEngine.UI.Button>()
+                : Button("God mode toggle", hud.transform, new Vector2(1f, 0f), new Vector2(-280f, 15f),
+                    new Vector2(230f, 28f), "F2 / GOD MODE OFF", out _, false);
+            god.transform.SetAsLastSibling();
+            void Assign(string field, UnityEngine.Object value) { view.FindPropertyRelative(field).objectReferenceValue = value; }
+            Assign("roundTimeLabel", hud.transform.Find("Time label").GetComponent<TextMeshProUGUI>());
+            Assign("godMode", god); Assign("godModeLabel", god.GetComponentInChildren<TextMeshProUGUI>());
+            Assign("bootOverlay", boot.gameObject); Assign("bootBackdrop", black); Assign("bootTerminal", terminal); Assign("bootHeadline", headline);
+            Assign("storyMessage", message); Assign("storyCapture", capture);
+            SerializedProperty edgeArray = view.FindPropertyRelative("storyEdges"); edgeArray.arraySize = edges.Length;
+            for (int i = 0; i < edges.Length; i++) edgeArray.GetArrayElementAtIndex(i).objectReferenceValue = edges[i];
+            List<CanvasGroup> fades = new List<CanvasGroup>();
+            foreach (Transform child in hud.transform)
+            {
+                if (child == boot || child == story || child.gameObject == menu || child.gameObject == duel || child == god.transform) continue;
+                CanvasGroup group = child.GetComponent<CanvasGroup>();
+                if (group == null) group = child.gameObject.AddComponent<CanvasGroup>();
+                group.alpha = 1f; fades.Add(group);
+            }
+            SerializedProperty fadeArray = view.FindPropertyRelative("bootFades"); fadeArray.arraySize = fades.Count;
+            for (int i = 0; i < fades.Count; i++) fadeArray.GetArrayElementAtIndex(i).objectReferenceValue = fades[i];
+            serializedHud.ApplyModifiedPropertiesWithoutUndo();
+            ((TextMeshProUGUI)view.FindPropertyRelative("duelDetail").objectReferenceValue).lineSpacing = 10f;
+        }
+
+        private static UnityEngine.UI.Image StoryEdge(Transform parent, string name, Vector2 min, Vector2 max, Vector2 low, Vector2 high)
+        {
+            Transform existing = parent.Find(name);
+            UnityEngine.UI.Image edge = existing != null ? existing.GetComponent<UnityEngine.UI.Image>()
+                : Box(name, parent, Vector2.zero, Vector2.zero, Vector2.zero, Color.clear);
+            edge.rectTransform.anchorMin = min; edge.rectTransform.anchorMax = max;
+            edge.rectTransform.offsetMin = low; edge.rectTransform.offsetMax = high;
+            edge.color = Color.clear; return edge;
+        }
+
         [MenuItem("Rewind Rampage/Upgrade scene to v0.4.1 - Continuous playback")]
         public static void UpgradeToV041()
         {
@@ -43,7 +146,7 @@ namespace RewindRampage.Editor
                 EditorUtility.SetDirty(hud);
                 EditorSceneManager.SaveScene(scene, path);
             }
-            PlayerSettings.bundleVersion = "0.4.1";
+            PlayerSettings.bundleVersion = "0.4.2";
             AssetDatabase.SaveAssets();
             AssetDatabase.ForceReserializeAssets(new[] { tuningPath });
             EditorSceneManager.OpenScene(scenes[0], OpenSceneMode.Single);
@@ -77,7 +180,7 @@ namespace RewindRampage.Editor
             UpgradeArchiveScene(archive, GameAct.Archive);
             EditorSceneManager.SaveScene(archive, archivePath);
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(mainPath, true), new EditorBuildSettingsScene(archivePath, true) };
-            PlayerSettings.bundleVersion = "0.4.1";
+            PlayerSettings.bundleVersion = "0.4.2";
             AssetDatabase.SaveAssets();
             EditorSceneManager.OpenScene(mainPath, OpenSceneMode.Single);
             Debug.Log("REWIND RAMPAGE v0.4 saved: independent Act3 scene, direct menu entry and development F3. No gameplay tests were run.");
@@ -131,7 +234,7 @@ namespace RewindRampage.Editor
                 SerializedObject source = new SerializedObject(defaults);
                 SerializedObject target = new SerializedObject(tuning);
                 string[] fields = { "replaySampleInterval", "ghostBossHealth", "ghostBossRadius", "ghostBossInvulnerability",
-                    "tapeRewindTransition", "replayWarningLead", "replayClipProtection" };
+                    "replayWarningLead", "replayClipProtection" };
                 foreach (string field in fields) target.CopyFromSerializedProperty(source.FindProperty(field));
                 target.ApplyModifiedPropertiesWithoutUndo();
                 UnityEngine.Object.DestroyImmediate(defaults);
@@ -147,7 +250,7 @@ namespace RewindRampage.Editor
             EnsureDuelPresentation(hud);
             hud.SetEnglishPreview();
             EditorUtility.SetDirty(hud);
-            PlayerSettings.bundleVersion = "0.4.1";
+            PlayerSettings.bundleVersion = "0.4.2";
             EditorSceneManager.SaveScene(scene, scenePath);
             AssetDatabase.SaveAssets();
             Debug.Log("REWIND RAMPAGE v0.3 upgraded in place; playback duel UI and tuning saved. No gameplay tests were run.");
@@ -203,7 +306,7 @@ namespace RewindRampage.Editor
             if (hud == null) throw new InvalidOperationException("The existing scene has no RewindHud.");
             hud.SetEnglishPreview();
             EditorUtility.SetDirty(hud);
-            PlayerSettings.bundleVersion = "0.4.1";
+            PlayerSettings.bundleVersion = "0.4.2";
             EditorSceneManager.SaveScene(scene, scenePath);
             AssetDatabase.SaveAssets();
             AssetDatabase.ForceReserializeAssets(new[] { Root + "/Settings/DemoTuning.asset" });
@@ -257,7 +360,7 @@ namespace RewindRampage.Editor
             SerializedObject serializedHud = new SerializedObject(hud);
             SerializedProperty view = serializedHud.FindProperty("view");
             TextMeshProUGUI nodeStatus = EnsureLabel("Exposure / volatile status", hud.transform, new Vector2(0.5f, 1f),
-                new Vector2(0f, -122f), new Vector2(510f, 22f), "DOUBLE EXPOSURE / DEMO v0.4.1", 12f, GameArt.Gold);
+                new Vector2(0f, -122f), new Vector2(510f, 22f), "DOUBLE EXPOSURE / DEMO v0.4.2", 12f, GameArt.Gold);
             TextMeshProUGUI chainLabel = EnsureLabel("Chain reaction", hud.transform, new Vector2(0.5f, 0.5f),
                 new Vector2(0f, 175f), new Vector2(1000f, 35f), string.Empty, 23f, GameArt.Orange);
             nodeStatus.transform.SetAsFirstSibling();
@@ -267,7 +370,7 @@ namespace RewindRampage.Editor
             serializedHud.ApplyModifiedPropertiesWithoutUndo();
             hud.SetEnglishPreview();
             EditorUtility.SetDirty(hud);
-            PlayerSettings.bundleVersion = "0.4.1";
+            PlayerSettings.bundleVersion = "0.4.2";
             EditorSceneManager.SaveScene(scene, scenePath);
             AssetDatabase.SaveAssets();
             Debug.Log("REWIND RAMPAGE v0.2 scene upgraded in place; English UI, ghost nodes and volatile enemy assets saved.");
@@ -331,6 +434,7 @@ namespace RewindRampage.Editor
             GameManager game = new GameObject("Rewind Rampage - Game").AddComponent<GameManager>();
             game.gameObject.AddComponent<Act3TestEntry>();
             game.Configure(tuning, art, player, spawner, feedback, hud, camera);
+            game.ConfigureStoryArena(GameObject.Find("Arena - dark signal grid").transform);
             new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
 
             PlayerSettings.productName = "REWIND RAMPAGE";
@@ -658,7 +762,7 @@ namespace RewindRampage.Editor
             refs.bannerDetail = Label("Combo detail", parent, new Vector2(0.5f, 0.5f), new Vector2(0f, 216f), new Vector2(1200f, 32f),
                 "", 15f, GameArt.White, TextAlignmentOptions.Center);
             refs.nodeStatus = Label("Exposure / volatile status", parent, new Vector2(0.5f, 1f), new Vector2(0f, -122f), new Vector2(510f, 22f),
-                "DOUBLE EXPOSURE / DEMO v0.4.1", 12f, GameArt.Gold, TextAlignmentOptions.Center);
+                "DOUBLE EXPOSURE / DEMO v0.4.2", 12f, GameArt.Gold, TextAlignmentOptions.Center);
             refs.chainLabel = Label("Chain reaction", parent, new Vector2(0.5f, 0.5f), new Vector2(0f, 175f), new Vector2(1000f, 35f),
                 "", 23f, GameArt.Orange, TextAlignmentOptions.Center);
             refs.flash = Box("Damage flash", parent, Vector2.zero, Vector2.zero, Vector2.zero, Color.clear);
@@ -677,6 +781,7 @@ namespace RewindRampage.Editor
             hud.Configure(refs);
             EnsureDuelPresentation(hud);
             EnsureArchiveEntry(hud);
+            EnsureStoryPresentation(hud);
             return hud;
         }
 
@@ -693,7 +798,7 @@ namespace RewindRampage.Editor
             Box("Case top rule", panel, new Vector2(0f, 1f), Vector2.zero, new Vector2(1120f, 2f), new Color(0.13f, 0.29f, 0.34f));
             Box("Case bottom rule", panel, Vector2.zero, Vector2.zero, new Vector2(1120f, 2f), new Color(0.13f, 0.29f, 0.34f));
             refs.menuTag = Label("Menu eyebrow", panel, new Vector2(0f, 1f), new Vector2(56f, -40f), new Vector2(1000f, 28f),
-                "TAPE 004 / OLD TECH / DEMO v0.4.1", 15f, GameArt.Cyan);
+                "TAPE 004 / OLD TECH / DEMO v0.4.2", 15f, GameArt.Cyan);
             refs.menuTitle = Label("Menu title", panel, new Vector2(0f, 1f), new Vector2(50f, -102f), new Vector2(750f, 205f),
                 "REWIND\n<color=#FFC242>RAMPAGE</color>", 82f, GameArt.White);
             refs.menuTitle.lineSpacing = -16f;

@@ -57,7 +57,7 @@ namespace RewindRampage
                 ReplayAttackSegment attack = source.Attacks[i];
                 if (!actions.TryGetValue(attack.ActionId, out RecordedAction action))
                 {
-                    action = new RecordedAction { StartTime = attack.Time, First = i };
+                    action = new RecordedAction { StartTime = source.ActionStartTimes[attack.ActionId], First = i };
                     actions.Add(attack.ActionId, action);
                 }
                 action.EndTime = attack.Time; action.Last = i;

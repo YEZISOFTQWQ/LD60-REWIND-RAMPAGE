@@ -10,10 +10,14 @@ namespace RewindRampage
         private GameTuning tuning;
         private float invulnerableUntil;
         private Vector2 facing = Vector2.up;
+        private SpriteRenderer[] presentationParts;
+        private float[] presentationAlpha;
 
         public int Health { get; private set; }
         public Vector2 Position => transform.position;
         public Vector2 Facing => facing;
+        public bool Invincible { get; private set; }
+        public void ToggleInvincibility() { Invincible = !Invincible; }
 
         public void Configure(SpriteRenderer bodyRenderer, SpriteRenderer glowRenderer, LineRenderer ring)
         {
@@ -22,7 +26,23 @@ namespace RewindRampage
             cooldownRing = ring;
         }
 
-        public void Initialize(GameTuning settings) { tuning = settings; }
+        public void Initialize(GameTuning settings)
+        {
+            tuning = settings;
+            presentationParts = GetComponentsInChildren<SpriteRenderer>(true);
+            presentationAlpha = new float[presentationParts.Length];
+            for (int i = 0; i < presentationParts.Length; i++) presentationAlpha[i] = presentationParts[i].color.a;
+        }
+
+        public void SetPresentationVisibility(float alpha)
+        {
+            for (int i = 0; i < presentationParts.Length; i++)
+            {
+                Color color = presentationParts[i].color;
+                color.a = presentationAlpha[i] * alpha;
+                presentationParts[i].color = color;
+            }
+        }
 
         public void ResetPlayer(int health = -1)
         {
@@ -47,7 +67,7 @@ namespace RewindRampage
 
         public bool TakeDamage(float time)
         {
-            if (time < invulnerableUntil || Health <= 0) return false;
+            if (Invincible || time < invulnerableUntil || Health <= 0) return false;
             Health--;
             Protect(time, tuning.hurtInvulnerability);
             return true;

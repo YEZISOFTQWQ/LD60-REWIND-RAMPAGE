@@ -53,7 +53,6 @@ namespace RewindRampage
         [Min(1)] public int ghostBossHealth = 2;
         [Min(0.1f)] public float ghostBossRadius = 0.85f;
         [Min(0f)] public float ghostBossInvulnerability = 0.7f;
-        [Min(0.1f)] public float tapeRewindTransition = 1.8f;
         [Min(0.1f)] public float replayWarningLead = 0.5f;
         [Min(0f)] public float replayClipProtection = 0.5f;
 
