@@ -49,6 +49,16 @@ namespace RewindRampage
         [Min(0.01f)] public float volatileExplosionRadius = 1.75f;
         [Min(1)] public int volatileExplosionDamage = 1;
 
+        [Header("Act II / Playback")]
+        [Min(0.005f)] public float replaySampleInterval = 0.02f;
+        [Min(1)] public int ghostBossHealth = 2;
+        [Min(0.1f)] public float ghostBossRadius = 0.85f;
+        [Min(0f)] public float ghostBossInvulnerability = 0.7f;
+        [Min(0.1f)] public float tapeRewindTransition = 1.8f;
+        [Min(0.1f)] public float tapeCutDuration = 0.4f;
+        [Min(0.1f)] public float replayWarningLead = 0.5f;
+        [Min(0f)] public float replayClipProtection = 0.5f;
+
         public Vector2 ClampToArena(Vector2 position, float radius)
         {
             return new Vector2(

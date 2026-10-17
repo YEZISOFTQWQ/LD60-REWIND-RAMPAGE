@@ -7,7 +7,7 @@ namespace RewindRampage
 {
     public sealed class RewindHud : MonoBehaviour
     {
-        public const string TitleInstructions = "WASD records your last 3 seconds. SPACE rewinds to attack.\nCross your trail to plant gold nodes. Rewind to detonate.\nOrange hexagons explode on death. Chain them together.";
+        public const string TitleInstructions = "WASD records 3 seconds. SPACE rewinds to attack.\nCross trails for gold nodes. Chain orange enemies.\nSurvive ACT I (90s), then erase your past in ACT II (30s).";
         [Serializable]
         public sealed class References
         {
@@ -41,6 +41,13 @@ namespace RewindRampage
             public TextMeshProUGUI primaryLabel;
             public UnityEngine.UI.Button restart;
             public UnityEngine.UI.Button mute;
+            public GameObject duelOverlay;
+            public UnityEngine.UI.Image duelBackdrop;
+            public UnityEngine.UI.Image trackingBar;
+            public UnityEngine.UI.RawImage scanlines;
+            public TextMeshProUGUI duelTitle;
+            public TextMeshProUGUI duelDetail;
+            public TextMeshProUGUI duelTapeTime;
         }
 
         [SerializeField] private References view;
@@ -72,15 +79,15 @@ namespace RewindRampage
 
         private void ActivatePrimary()
         {
-            if (game.State == SessionState.Paused) game.TogglePause();
-            else game.StartRun();
+            game.ActivatePrimary();
         }
 
         public void ShowState()
         {
             bool playing = game.State == SessionState.Playing;
             view.menu.SetActive(!playing);
-            view.restart.gameObject.SetActive(game.State == SessionState.Paused);
+            view.restart.gameObject.SetActive(game.State == SessionState.Paused || (game.State == SessionState.Results && game.InDuel && !game.Survived));
+            view.restart.GetComponentInChildren<TextMeshProUGUI>().text = game.InDuel ? "NEW RECORDING" : "RESTART TAPE";
             if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
             bannerRemaining = noticeRemaining = chainRemaining = 0f;
             damageFlash = 0f;
@@ -94,11 +101,11 @@ namespace RewindRampage
             switch (game.State)
             {
                 case SessionState.Title:
-                    view.menuTag.text = "TAPE 002 / OLD TECH / DEMO v0.2.1";
+                    view.menuTag.text = "TAPE 003 / OLD TECH / DEMO v0.3";
                     view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
                     view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
                     view.menuInstructions.text = TitleInstructions;
-                    view.menuStats.text = "90 SECONDS     /     3 LIVES     /     ONE OLD TAPE";
+                    view.menuStats.text = "90s REC / 30s PLAYBACK / 3 LIVES / ONE OLD TAPE";
                     view.primaryLabel.text = "PLAY TAPE  >  [ SPACE ]";
                     break;
                 case SessionState.Paused:
@@ -110,6 +117,18 @@ namespace RewindRampage
                     view.primaryLabel.text = "RESUME  >  [ ESC ]";
                     break;
                 case SessionState.Results:
+                    if (game.InDuel)
+                    {
+                        view.menuTag.text = game.Survived ? "ACT II COMPLETE / PAST RECORD ERASED" : "TEMPORAL CONFLICT UNRESOLVED";
+                        view.menuTitle.text = game.Survived ? "PAST RECORD\n<color=#FFC242>ERASED</color>" : "TEMPORAL\n<color=#FF4864>CONFLICT</color>";
+                        view.menuLead.text = game.Survived ? "THE TAPE IS EMPTY. THE SIGNAL REMAINS." : "CURRENT INSTANCE REJECTED";
+                        view.menuInstructions.text = game.Survived
+                            ? "Your past self dissolves into magnetic noise.\nSomething is still watching beyond the tape.\nEND OF DEMO / TO BE CONTINUED."
+                            : "Your recorded self survived the paradox.\nRetry Duel uses the same recording.\nNew Recording starts again from ACT I.";
+                        view.menuStats.SetText("DUEL {0:1}s / PAST SELF HP {1} / ACT I SCORE {2:000000}", game.Duel.DuelTime, game.Duel.Boss.Health, game.Score);
+                        view.primaryLabel.text = game.Survived ? "NEW RECORDING  >  [ SPACE ]" : "RETRY DUEL  >  [ SPACE ]";
+                        break;
+                    }
                     view.menuTag.text = game.Survived ? "END OF TAPE / RECORDING SAVED" : "SIGNAL LOST / RECORDING ENDED";
                     view.menuTitle.text = game.Survived ? "TAPE\n<color=#FFC242>COMPLETE</color>" : "SIGNAL\n<color=#FF4864>LOST</color>";
                     view.menuLead.SetText("FINAL SCORE  {0:000000}", game.Score);
@@ -131,17 +150,22 @@ namespace RewindRampage
                 displayedScore = game.Score;
                 view.score.SetText("{0:000000}", game.Score);
             }
-            int seconds = Mathf.CeilToInt(Mathf.Max(0f, game.Tuning.roundDuration - game.Elapsed));
+            float timeLeft = game.InDuel ? game.Duel.Remaining : game.Tuning.roundDuration - game.Elapsed;
+            if (game.InDuel && game.Duel.State == GhostDuelState.TransitionIn)
+                timeLeft = game.Tuning.roundDuration * (1f - game.Duel.TransitionProgress);
+            int seconds = Mathf.CeilToInt(Mathf.Max(0f, timeLeft));
             if (seconds != displayedSeconds)
             {
                 displayedSeconds = seconds;
                 view.timer.text = (seconds / 60).ToString("00") + ":" + (seconds % 60).ToString("00");
                 view.timer.color = seconds <= 15 ? GameArt.Red : GameArt.White;
             }
-            if (game.EnemyCount != displayedEnemies)
+            int hostileCount = game.InDuel ? game.Duel.Boss.Health : game.EnemyCount;
+            if (hostileCount != displayedEnemies)
             {
-                displayedEnemies = game.EnemyCount;
-                view.enemyCount.SetText("HOSTILES  {0:00} / {1}", displayedEnemies, game.Tuning.maximumEnemies);
+                displayedEnemies = hostileCount;
+                if (game.InDuel) view.enemyCount.SetText("PAST SELF HP  {0} / {1}", displayedEnemies, game.Tuning.ghostBossHealth);
+                else view.enemyCount.SetText("HOSTILES  {0:00} / {1}", displayedEnemies, game.Tuning.maximumEnemies);
             }
 
             if (game.Player.Health < previousHealth) damageFlash = 0.55f;
@@ -156,7 +180,7 @@ namespace RewindRampage
             bool rewinding = game.Rewind.IsRewinding;
             bool ready = game.Rewind.IsReady;
             bool cooling = game.Rewind.CooldownRemaining > 0f;
-            string mode = rewinding ? "<< REW" : game.State == SessionState.Paused ? "II PAUSE" : "REC";
+            string mode = game.State == SessionState.Paused ? "II PAUSE" : rewinding ? game.InDuel ? "<< HOLD" : "<< REW" : game.InDuel ? "PLAYBACK" : "REC";
             if (previousMode != mode) { view.recordState.text = mode; previousMode = mode; }
             view.recordState.color = rewinding ? GameArt.Gold : GameArt.Cyan;
             Color dotColor = rewinding ? GameArt.Gold : GameArt.Red;
@@ -177,17 +201,20 @@ namespace RewindRampage
             for (int i = 0; i < view.reels.Length; i++) view.reels[i].Rotate(0f, 0f, reelSpeed * deltaTime);
 
             int phase = game.Elapsed < 15f ? 0 : game.Elapsed < 25f ? 1 : game.Elapsed < 45f ? 2 : game.Elapsed < 65f ? 3 : 4;
-            if (phase != lastPhase)
+            if (!game.InDuel && phase != lastPhase)
             {
                 lastPhase = phase;
-                view.phase.text = new[] { "01 / LEARN THE TAPE", "02 / DOUBLE EXPOSURE", "03 / VOLATILE SIGNALS", "04 / CHAIN REACTION", "05 / FINAL TRANSMISSION" }[phase];
+                view.phase.text = new[] { "ACT I / REC / LEARN THE TAPE", "ACT I / DOUBLE EXPOSURE", "ACT I / VOLATILE SIGNALS", "ACT I / CHAIN REACTION", "ACT I / FINAL TRANSMISSION" }[phase];
                 if (game.State == SessionState.Playing && phase == 1 && game.Tuning.enableGhostNodes)
                     ShowNotice("DOUBLE EXPOSURE ONLINE / CROSS YOUR TRAIL TO PLANT A GOLD NODE.");
                 if (game.State == SessionState.Playing && phase == 2 && game.Tuning.enableVolatileEnemies)
                     ShowNotice("VOLATILE SIGNALS ONLINE / ORANGE HEXAGONS EXPLODE ON DEATH.");
             }
+            if (game.InDuel) view.phase.SetText("ACT II / PLAYBACK / CLIP {0} OF 3", game.Duel.ClipIndex + 1);
 
-            string hint = rewinding ? "REWIND / ENEMIES FROZEN. YOU ARE INVULNERABLE." : game.Elapsed < 5f
+            string hint = game.InDuel ? rewinding ? "PAST SELF FROZEN / ONE PARADOX HIT PER REWIND." :
+                "ERASE YOUR PAST / RED DASHES WARN OF ATTACKS. THE FAINT PINK LINE SHOWS ITS NEXT SECOND."
+                : rewinding ? "REWIND / ENEMIES FROZEN. YOU ARE INVULNERABLE." : game.Elapsed < 5f
                 ? "WASD TO RECORD A PATH. LURE THE RED CHASERS BEHIND YOU." : game.Elapsed < 12f && game.RewindCount == 0
                 ? "SPACE TO REWIND AND ATTACK. THE BLUE TRAIL CANNOT HURT ENEMIES." : cooling
                 ? "KEEP MOVING WHILE THE TAPE RECHARGES. PLAN YOUR NEXT ATTACK." : game.GhostNodeCount > 0
@@ -203,7 +230,9 @@ namespace RewindRampage
             float bannerAlpha = Mathf.Clamp01(bannerRemaining * 4f);
             view.bannerTitle.alpha = view.bannerDetail.alpha = bannerAlpha;
             view.muteLabel.text = game.Muted ? "M / SOUND OFF" : "M / SOUND ON";
-            if (game.Tuning.enableGhostNodes && game.Elapsed < game.Tuning.ghostNodeUnlockTime)
+            if (game.InDuel)
+                view.nodeStatus.SetText("NODES {0} / REPLAY {1:0.0}s / 1x SPEED", game.GhostNodeCount, game.Duel.ReplayTime);
+            else if (game.Tuning.enableGhostNodes && game.Elapsed < game.Tuning.ghostNodeUnlockTime)
                 view.nodeStatus.SetText("DOUBLE EXPOSURE IN {0}s", Mathf.Ceil(game.Tuning.ghostNodeUnlockTime - game.Elapsed));
             else if (game.Tuning.enableVolatileEnemies && game.Elapsed < game.Tuning.volatileUnlockTime)
                 view.nodeStatus.SetText("NODES {0} / VOLATILES IN {1}s", game.GhostNodeCount,
@@ -213,6 +242,24 @@ namespace RewindRampage
                     game.Tuning.enableVolatileEnemies ? game.Tuning.maximumVolatileEnemies : 0);
             chainRemaining = Mathf.Max(0f, chainRemaining - deltaTime);
             view.chainLabel.alpha = Mathf.Clamp01(chainRemaining * 4f);
+            TickDuelPresentation();
+        }
+
+        private void TickDuelPresentation()
+        {
+            bool visible = game.InDuel && game.State == SessionState.Playing && game.Duel.IsTransition;
+            view.duelOverlay.SetActive(visible);
+            view.scanlines.color = game.InDuel ? new Color(1f, 1f, 1f, 0.35f) : Color.white;
+            if (!visible) return;
+            GhostDuelState state = game.Duel.State;
+            view.duelTitle.text = state == GhostDuelState.TransitionIn ? "END OF TAPE" : state == GhostDuelState.TapeCut ? "TAPE SKIP" : "DUPLICATE SUBJECT DETECTED";
+            view.duelDetail.text = state == GhostDuelState.TransitionIn ? "REWINDING THE FULL RECORDING..." : state == GhostDuelState.TapeCut ? "TRACKING... / COMBAT CLOCK HELD" : "ERASE YOUR PAST";
+            float tapeTime = state == GhostDuelState.TransitionIn ? game.Tuning.roundDuration * (1f - game.Duel.TransitionProgress) : game.Duel.ReplayTime;
+            int seconds = Mathf.FloorToInt(tapeTime);
+            view.duelTapeTime.text = (seconds / 60).ToString("00") + ":" + (seconds % 60).ToString("00");
+            float black = state == GhostDuelState.TransitionIn && game.Duel.TransitionProgress > 0.9f ? 1f : state == GhostDuelState.Preparing ? 0.55f : 0.2f;
+            view.duelBackdrop.color = new Color(0.008f, 0.008f, 0.02f, black);
+            view.trackingBar.rectTransform.anchoredPosition = new Vector2(0f, Mathf.PingPong(uiTime * 1300f, 1000f) - 500f);
         }
 
         public void ShowBurst(string title, string detail, Color color, float duration)
@@ -238,15 +285,15 @@ namespace RewindRampage
 
         public void SetEnglishPreview()
         {
-            view.menuTag.text = "TAPE 002 / OLD TECH / DEMO v0.2.1";
+            view.menuTag.text = "TAPE 003 / OLD TECH / DEMO v0.3";
             view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
             view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
             view.menuInstructions.text = TitleInstructions;
-            view.menuStats.text = "90 SECONDS     /     3 LIVES     /     ONE OLD TAPE";
+            view.menuStats.text = "90s REC / 30s PLAYBACK / 3 LIVES / ONE OLD TAPE";
             view.instructions.text = "WASD TO RECORD A PATH. LURE THE RED CHASERS BEHIND YOU.";
             view.primaryLabel.text = "PLAY TAPE  >  [ SPACE ]";
             view.notice.text = view.bannerTitle.text = view.bannerDetail.text = view.chainLabel.text = string.Empty;
-            view.nodeStatus.text = "DOUBLE EXPOSURE / DEMO v0.2.1";
+            view.nodeStatus.text = "REC / PLAYBACK / DEMO v0.3";
         }
 
         private void OnDestroy()

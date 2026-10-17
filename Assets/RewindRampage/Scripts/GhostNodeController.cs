@@ -77,13 +77,14 @@ namespace RewindRampage
             for (int i = visualIndex; i < visuals.Count; i++) visuals[i].Root.gameObject.SetActive(false);
         }
 
-        public void TriggerNode(GhostNode node)
+        public bool TriggerNode(GhostNode node)
         {
-            if (!node.TryTrigger()) return;
+            if (!node.TryTrigger()) return false;
             feedback.ShowExplosion(node.Position, tuning.ghostNodeRadius, DamageSource.GhostNode, 0f);
             damage.ApplyArea(node.Position, tuning.ghostNodeRadius, tuning.ghostNodeDamage,
                 new DamageContext(DamageSource.GhostNode, damage.RewindId));
             onTriggered?.Invoke();
+            return true;
         }
 
         public void ClearAllNodes()

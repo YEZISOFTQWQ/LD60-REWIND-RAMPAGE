@@ -3,6 +3,7 @@ using UnityEngine;
 namespace RewindRampage
 {
     public enum SessionState { Title, Playing, Paused, Results }
+    public enum GameAct { Rec, Playback }
 
     public sealed class GameManager : MonoBehaviour
     {
@@ -19,11 +20,16 @@ namespace RewindRampage
         private RewindController rewind;
         private TrailIntersectionDetector intersections;
         private GhostNodeController ghostNodes;
+        private RunRecorder runRecorder;
+        private GhostDuelManager duel;
         private int lastWidth;
         private int lastHeight;
         private Vector2 movementStart;
 
         public SessionState State { get; private set; }
+        public GameAct Act { get; private set; }
+        public bool InDuel => Act == GameAct.Playback;
+        public GhostDuelManager Duel => duel;
         public GameTuning Tuning => tuning;
         public PlayerController Player => player;
         public TrailRecorder Recorder => recorder;
@@ -66,7 +72,15 @@ namespace RewindRampage
             damage = new TrailDamageSystem(tuning, spawner, OnKill, OnExplosion);
             intersections = new TrailIntersectionDetector(tuning, recorder, OnNodeCreated);
             ghostNodes = new GhostNodeController(tuning, art, damage, feedback, OnNodeTriggered);
+            runRecorder = new RunRecorder(tuning.replaySampleInterval);
             rewind = new RewindController(tuning, player, recorder, damage, feedback, intersections, ghostNodes, OnRewindFinished);
+            rewind.SegmentTraversed += (from, to, time, id) => runRecorder.RecordAttackSegment(from, to, time, tuning.attackRadius, id);
+            rewind.NodeBurst += (node, time, id) => runRecorder.RecordNodeBurst(node, time, tuning.ghostNodeRadius, id);
+            rewind.PositionObserved += (position, time, rewinding) => runRecorder.RecordFrame(position, time, rewinding, true);
+            duel = new GhostDuelManager(tuning, art, player, feedback, PrepareDuelPlayer,
+                () => hud.ShowBurst("PARADOX HIT", "THE PAST IS COMING APART", GameArt.Gold, 1.2f),
+                () => hud.ShowNotice("HISTORICAL ATTACK HIT / WATCH THE RED WARNINGS."), OnDuelFinished);
+            damage.SetBossTarget(duel.Boss);
             BestScore = PlayerPrefs.GetInt("RewindRampage.BestScore", 0);
             player.ResetPlayer();
             recorder.Clear(player.Position, 0f);
@@ -81,7 +95,7 @@ namespace RewindRampage
             if (Input.GetKeyDown(KeyCode.M)) ToggleMute();
             if (State == SessionState.Title || State == SessionState.Results)
             {
-                if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return)) StartRun();
+                if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return)) ActivatePrimary();
             }
             else if (Input.GetKeyDown(KeyCode.Escape)) TogglePause();
             else if (State == SessionState.Playing) TickGame(Time.deltaTime);
@@ -94,12 +108,14 @@ namespace RewindRampage
 
         private void TickGame(float deltaTime)
         {
+            if (InDuel) { TickDuel(deltaTime); return; }
             float previousTime = Elapsed;
             deltaTime = Mathf.Min(deltaTime, tuning.roundDuration - Elapsed);
             Elapsed += deltaTime;
             rewind.TickCooldown(deltaTime);
 
             bool playedRewind = rewind.IsRewinding;
+            bool startedThisFrame = false;
             if (!playedRewind)
             {
                 Vector2 input = new Vector2(
@@ -111,13 +127,15 @@ namespace RewindRampage
                 movementStart = previousPosition;
                 player.Move(input, deltaTime);
                 recorder.Record(previousPosition, player.Position, previousTime, Elapsed);
+                runRecorder.RecordFrame(player.Position, Elapsed, false);
 
                 if (Input.GetKeyDown(KeyCode.Space))
                 {
-                    if (rewind.TryStart())
+                    if (rewind.TryStart(Elapsed))
                     {
                         RewindCount++;
                         playedRewind = true;
+                        startedThisFrame = true;
                         spawner.SetFrozenVisuals(true);
                         hud.ShowBurst("<< REWIND", "SIGNAL FROZEN / 5x REVERSE", GameArt.Gold, 0.7f);
                     }
@@ -131,7 +149,7 @@ namespace RewindRampage
 
             if (playedRewind)
             {
-                rewind.Step(deltaTime, Elapsed);
+                if (!startedThisFrame) rewind.Step(deltaTime, Elapsed);
                 if (!rewind.IsRewinding) spawner.SetFrozenVisuals(false);
             }
             else
@@ -142,8 +160,77 @@ namespace RewindRampage
 
             feedback.DrawHistory(recorder, rewind.IsRewinding);
             player.UpdateVisual(Elapsed, rewind.IsRewinding, rewind.CooldownFraction, rewind.IsReady);
+            runRecorder.RecordFrame(player.Position, Elapsed, rewind.IsRewinding);
             if (player.Health <= 0) EndRun(false);
-            else if (Elapsed >= tuning.roundDuration) EndRun(true);
+            else if (Elapsed >= tuning.roundDuration) BeginPlayback();
+        }
+
+        private Vector2 MovementInput()
+        {
+            return new Vector2(
+                (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow) ? 1f : 0f) - (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow) ? 1f : 0f),
+                (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.UpArrow) ? 1f : 0f) - (Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.DownArrow) ? 1f : 0f));
+        }
+
+        private void BeginPlayback()
+        {
+            RunRecording recording = runRecorder.StopRecording(player.Position, Elapsed, rewind.IsRewinding);
+            rewind.Reset();
+            spawner.SetFrozenVisuals(true);
+            Act = GameAct.Playback;
+            duel.StartDuel(recording);
+            SaveBestScore();
+            hud.ShowState();
+        }
+
+        private void PrepareDuelPlayer()
+        {
+            feedback.ResetFeedback();
+            rewind.Reset();
+            spawner.ResetEnemies();
+            player.ResetPlayer();
+            Elapsed = 0f;
+            intersections.IgnoreUnlockDelay = true;
+            recorder.Clear(player.Position, Elapsed);
+        }
+
+        private void TickDuel(float deltaTime)
+        {
+            if (duel.IsTransition)
+            {
+                duel.TickTransition(deltaTime);
+                feedback.DrawHistory(recorder, false);
+                player.UpdateVisual(Elapsed, false, rewind.CooldownFraction, rewind.IsReady);
+                return;
+            }
+            if (duel.State != GhostDuelState.Fighting || duel.ResolveOutcome()) return;
+            bool wasRewinding = rewind.IsRewinding;
+            if (!wasRewinding)
+                deltaTime = Mathf.Min(deltaTime, (duel.ClipIndex + 1) * GhostDuelManager.ClipDuration - duel.DuelTime);
+            float previousTime = Elapsed;
+            Vector2 previousPosition = player.Position;
+            Elapsed += deltaTime;
+            duel.SetPlayerClock(Elapsed);
+            rewind.TickCooldown(deltaTime);
+            bool started = false;
+            if (wasRewinding) rewind.Step(deltaTime, Elapsed);
+            else
+            {
+                player.Move(MovementInput(), deltaTime);
+                recorder.Record(previousPosition, player.Position, previousTime, Elapsed);
+                if (Input.GetKeyDown(KeyCode.Space))
+                {
+                    started = rewind.TryStart(Elapsed);
+                    if (started) RewindCount++;
+                    else { feedback.PlayDenied(); hud.ShowNotice("KEEP MOVING / RECORD A PATH AND LET THE TAPE RECHARGE."); }
+                }
+            }
+            bool freezeReplay = wasRewinding || started;
+            duel.SetFrozen(freezeReplay, deltaTime);
+            if (!freezeReplay) duel.Advance(deltaTime, Elapsed, previousPosition);
+            else duel.ResolveOutcome();
+            feedback.DrawHistory(recorder, rewind.IsRewinding);
+            player.UpdateVisual(Elapsed, rewind.IsRewinding, rewind.CooldownFraction, rewind.IsReady);
         }
 
         private void CheckContacts()
@@ -194,11 +281,15 @@ namespace RewindRampage
         private void OnNodeTriggered()
         {
             TotalGhostNodeTriggers++;
+            // The world-space splice effect already labels the node. Preserve the
+            // boss's PARADOX HIT headline when the same burst damages the past self.
+            if (InDuel) return;
             hud.ShowBurst("SPLICE BURST", "DOUBLE EXPOSURE DETONATED", GameArt.Gold, 1.1f);
         }
 
         private void OnRewindFinished(int kills, int points)
         {
+            if (InDuel) return;
             BestRewindKills = Mathf.Max(BestRewindKills, kills);
             if (kills > 0)
                 hud.ShowBurst(kills == 1 ? "REWIND KILL" : kills + "x COMBO", kills + " ELIMINATED / +" + points, GameArt.Gold, 1.5f);
@@ -208,6 +299,10 @@ namespace RewindRampage
 
         public void StartRun()
         {
+            duel.Reset();
+            runRecorder.ClearRecording();
+            Act = GameAct.Rec;
+            intersections.IgnoreUnlockDelay = false;
             feedback.ResetFeedback();
             rewind.Reset();
             spawner.ResetEnemies();
@@ -217,9 +312,36 @@ namespace RewindRampage
             TotalGhostNodeTriggers = TotalChainKills = 0;
             Survived = false;
             recorder.Clear(player.Position, Elapsed);
+            runRecorder.StartRecording(player.Position);
             State = SessionState.Playing;
             feedback.SetPaused(false);
             feedback.PlayStart();
+            hud.ShowState();
+        }
+
+        public void ActivatePrimary()
+        {
+            if (State == SessionState.Paused) TogglePause();
+            else if (State == SessionState.Results && InDuel && !Survived) RetryDuel();
+            else StartRun();
+        }
+
+        public void RetryDuel()
+        {
+            if (duel.Recording == null) return;
+            Survived = false;
+            State = SessionState.Playing;
+            feedback.SetPaused(false);
+            duel.StartDuel(duel.Recording, false);
+            hud.ShowState();
+        }
+
+        private void OnDuelFinished(bool won)
+        {
+            Survived = won;
+            State = SessionState.Results;
+            rewind.Reset();
+            SaveBestScore();
             hud.ShowState();
         }
 
@@ -235,18 +357,24 @@ namespace RewindRampage
 
         private void EndRun(bool survived)
         {
+            runRecorder.ClearRecording();
             Survived = survived;
             State = SessionState.Results;
             rewind.Reset();
             spawner.SetFrozenVisuals(false);
             feedback.PlayEnd(survived);
+            SaveBestScore();
+            hud.ShowState();
+        }
+
+        private void SaveBestScore()
+        {
             if (Score > BestScore)
             {
                 BestScore = Score;
                 PlayerPrefs.SetInt("RewindRampage.BestScore", BestScore);
                 PlayerPrefs.Save();
             }
-            hud.ShowState();
         }
 
         private void FitCamera()
@@ -266,6 +394,7 @@ namespace RewindRampage
         {
             damage?.Dispose();
             intersections?.Dispose();
+            duel?.Dispose();
         }
     }
 }

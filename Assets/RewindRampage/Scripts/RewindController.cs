@@ -20,6 +20,11 @@ namespace RewindRampage
         private int targetIndex;
         private float playbackTime;
         private float cooldownRemaining;
+        private float stepClockStart, stepClockEnd, stepPlaybackStart, lastSweepClock;
+
+        public event Action<Vector2, Vector2, float, int> SegmentTraversed;
+        public event Action<GhostNode, float, int> NodeBurst;
+        public event Action<Vector2, float, bool> PositionObserved;
 
         public bool IsRewinding { get; private set; }
         public float CooldownRemaining => cooldownRemaining;
@@ -57,7 +62,7 @@ namespace RewindRampage
 
         public void TickCooldown(float deltaTime) { cooldownRemaining = Mathf.Max(0f, cooldownRemaining - deltaTime); }
 
-        public bool TryStart()
+        public bool TryStart(float gameTime)
         {
             if (!IsReady) return false;
             recorder.CopyPath(activePath);
@@ -69,6 +74,10 @@ namespace RewindRampage
             playbackTime = activePath[activePath.Count - 1].Time;
             targetIndex = activePath.Count - 2;
             feedback.BeginRewind(activePath);
+            stepClockStart = gameTime;
+            stepClockEnd = lastSweepClock = gameTime;
+            stepPlaybackStart = playbackTime;
+            PositionObserved?.Invoke(player.Position, gameTime, true);
             // The starting disc is part of the attack, including a stationary endpoint.
             TravelTo(player.Position, playbackTime);
             return true;
@@ -76,6 +85,9 @@ namespace RewindRampage
 
         public void Step(float deltaTime, float gameTime)
         {
+            stepClockStart = gameTime - deltaTime;
+            stepClockEnd = gameTime;
+            stepPlaybackStart = playbackTime;
             float nextTime = Mathf.Max(activePath[0].Time, playbackTime - deltaTime * tuning.rewindMultiplier);
 
             // Visit EVERY crossed sample, even if a low frame rate spans several corners.
@@ -100,6 +112,7 @@ namespace RewindRampage
             IsRewinding = false;
             cooldownRemaining = tuning.rewindCooldown;
             player.Protect(gameTime, tuning.exitInvulnerability);
+            PositionObserved?.Invoke(player.Position, ActualTime(playbackTime), false);
             recorder.Clear(player.Position, gameTime);
             activePath.Clear();
             activeNodes.Clear();
@@ -121,18 +134,33 @@ namespace RewindRampage
                 if (node.LaterTime < targetTime - 0.00001f) break;
                 nextNodeIndex++;
                 if (!node.IsActive || node.HasTriggered || node.LaterTime > playbackTime + 0.00001f) continue;
-                damage.Sweep(player.Position, node.Position);
-                player.SetPosition(node.Position);
-                feedback.AppendAttackPoint(node.Position);
-                nodes.TriggerNode(node);
+                SweepTo(node.Position, node.LaterTime);
+                if (nodes.TriggerNode(node)) NodeBurst?.Invoke(node, ActualTime(node.LaterTime), damage.RewindId);
                 damage.ResolveExplosions();
                 playbackTime = node.LaterTime;
             }
-            damage.Sweep(player.Position, target);
-            player.SetPosition(target);
-            feedback.AppendAttackPoint(target);
+            SweepTo(target, targetTime);
             damage.ResolveExplosions();
             playbackTime = targetTime;
+        }
+
+        private float ActualTime(float historicalTime)
+        {
+            // Numerical crossing tolerances must not move the recording clock backwards
+            // or stamp an event beyond the final 90-second frame.
+            return Mathf.Clamp(stepClockStart + Mathf.Max(0f, stepPlaybackStart - historicalTime) / tuning.rewindMultiplier,
+                lastSweepClock, stepClockEnd);
+        }
+
+        private void SweepTo(Vector2 target, float historicalTime)
+        {
+            float time = ActualTime(historicalTime);
+            lastSweepClock = time;
+            SegmentTraversed?.Invoke(player.Position, target, time, damage.RewindId);
+            damage.Sweep(player.Position, target);
+            player.SetPosition(target);
+            PositionObserved?.Invoke(target, time, true);
+            feedback.AppendAttackPoint(target);
         }
     }
 }

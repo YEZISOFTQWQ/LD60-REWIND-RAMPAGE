@@ -62,6 +62,7 @@ namespace RewindRampage
         private AudioClip endClip;
         private AudioClip spliceClip;
         private AudioClip explosionClip;
+        private AudioClip paradoxClip;
         private int fragmentCursor;
         private int popupCursor;
         private Transform waveRoot;
@@ -134,6 +135,7 @@ namespace RewindRampage
             endClip = Synth("Signal lost", 0.55f, 270f, 40f, 0.24f);
             spliceClip = Synth("Double exposure splice", 0.26f, 940f, 180f, 0.18f);
             explosionClip = Synth("Volatile signal burst", 0.31f, 260f, 45f, 0.64f);
+            paradoxClip = Synth("Magnetic tape tear", 0.28f, 1300f, 55f, 0.7f);
             rewindSource.clip = Synth("Tape motor rewind", 0.6f, 1200f, 160f, 0.52f);
             ambienceSource.clip = MakeHum();
             ambienceSource.Play();
@@ -428,6 +430,36 @@ namespace RewindRampage
         {
             Muted = !Muted;
             effectsSource.mute = rewindSource.mute = ambienceSource.mute = burstSource.mute = Muted;
+        }
+
+        public void PlayTapeTransition()
+        {
+            StopRewind();
+            rewindSource.pitch = 1.7f;
+            rewindSource.Play();
+            shake = 0.12f;
+        }
+
+        public void PlayTapeSkip()
+        {
+            effectsSource.PlayOneShot(paradoxClip, 0.4f);
+            shake = 0.15f;
+        }
+
+        public void PlayReplayWarning() { effectsSource.PlayOneShot(deniedClip, 0.35f); }
+
+        public void ParadoxHit(Vector2 position)
+        {
+            Burst(position, Color.white, 28, 5f);
+            effectsSource.PlayOneShot(paradoxClip, 0.7f);
+            shake = 0.18f;
+        }
+
+        public void EraseGhost(Vector2 position)
+        {
+            Burst(position, ReplayVisuals.Magenta, 70, 7f);
+            effectsSource.PlayOneShot(successClip, 0.7f);
+            shake = 0.2f;
         }
 
         public void SetPaused(bool value)

@@ -18,6 +18,73 @@ namespace RewindRampage.Editor
         private static GameArt art;
         private static GameTuning tuning;
 
+        [MenuItem("Rewind Rampage/Upgrade scene to v0.3")]
+        public static void UpgradeToV03()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before upgrading the scene.");
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            const string scenePath = "Assets/Scenes/SampleScene.unity";
+            Scene scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+            art = AssetDatabase.LoadAssetAtPath<GameArt>(Root + "/Art/DemoArt.asset");
+            tuning = AssetDatabase.LoadAssetAtPath<GameTuning>(Root + "/Settings/DemoTuning.asset");
+            if (!File.ReadAllText(Root + "/Settings/DemoTuning.asset").Contains("replaySampleInterval:"))
+            {
+                GameTuning defaults = ScriptableObject.CreateInstance<GameTuning>();
+                SerializedObject source = new SerializedObject(defaults);
+                SerializedObject target = new SerializedObject(tuning);
+                string[] fields = { "replaySampleInterval", "ghostBossHealth", "ghostBossRadius", "ghostBossInvulnerability",
+                    "tapeRewindTransition", "tapeCutDuration", "replayWarningLead", "replayClipProtection" };
+                foreach (string field in fields) target.CopyFromSerializedProperty(source.FindProperty(field));
+                target.ApplyModifiedPropertiesWithoutUndo();
+                UnityEngine.Object.DestroyImmediate(defaults);
+            }
+            EditorUtility.SetDirty(tuning);
+            RewindHud hud = null;
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                hud = root.GetComponentInChildren<RewindHud>(true);
+                if (hud != null) break;
+            }
+            if (hud == null) throw new InvalidOperationException("The existing scene has no RewindHud.");
+            EnsureDuelPresentation(hud);
+            hud.SetEnglishPreview();
+            EditorUtility.SetDirty(hud);
+            PlayerSettings.bundleVersion = "0.3.0";
+            EditorSceneManager.SaveScene(scene, scenePath);
+            AssetDatabase.SaveAssets();
+            Debug.Log("REWIND RAMPAGE v0.3 upgraded in place; playback duel UI and tuning saved. No gameplay tests were run.");
+        }
+
+        private static void EnsureDuelPresentation(RewindHud hud)
+        {
+            Transform existing = hud.transform.Find("Playback transition");
+            UnityEngine.UI.Image backdrop = existing != null ? existing.GetComponent<UnityEngine.UI.Image>() :
+                Box("Playback transition", hud.transform, Vector2.zero, Vector2.zero, Vector2.zero, Color.clear);
+            Stretch(backdrop.rectTransform);
+            backdrop.raycastTarget = false;
+            TextMeshProUGUI title = EnsureLabel("Playback title", backdrop.transform, new Vector2(0.5f, 0.5f),
+                new Vector2(0f, 65f), new Vector2(1400f, 80f), "END OF TAPE", 40f, GameArt.White);
+            TextMeshProUGUI detail = EnsureLabel("Playback detail", backdrop.transform, new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -10f), new Vector2(1300f, 40f), "ERASE YOUR PAST", 23f, new Color(1f, 0.2f, 0.64f));
+            TextMeshProUGUI clock = EnsureLabel("Playback tape clock", backdrop.transform, new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -90f), new Vector2(600f, 60f), "01:30", 38f, GameArt.Gold);
+            Transform barTransform = backdrop.transform.Find("Tracking distortion");
+            UnityEngine.UI.Image bar = barTransform != null ? barTransform.GetComponent<UnityEngine.UI.Image>() :
+                Box("Tracking distortion", backdrop.transform, new Vector2(0.5f, 0.5f), Vector2.zero,
+                    new Vector2(1800f, 25f), new Color(1f, 0.3f, 0.65f, 0.14f));
+            SerializedObject serializedHud = new SerializedObject(hud);
+            SerializedProperty view = serializedHud.FindProperty("view");
+            view.FindPropertyRelative("duelOverlay").objectReferenceValue = backdrop.gameObject;
+            view.FindPropertyRelative("duelBackdrop").objectReferenceValue = backdrop;
+            view.FindPropertyRelative("trackingBar").objectReferenceValue = bar;
+            view.FindPropertyRelative("duelTitle").objectReferenceValue = title;
+            view.FindPropertyRelative("duelDetail").objectReferenceValue = detail;
+            view.FindPropertyRelative("duelTapeTime").objectReferenceValue = clock;
+            view.FindPropertyRelative("scanlines").objectReferenceValue = hud.transform.Find("VHS scanlines").GetComponent<UnityEngine.UI.RawImage>();
+            serializedHud.ApplyModifiedPropertiesWithoutUndo();
+            backdrop.gameObject.SetActive(false);
+        }
+
         [MenuItem("Rewind Rampage/Upgrade scene to v0.2.1")]
         public static void UpgradeToV021()
         {
@@ -38,7 +105,7 @@ namespace RewindRampage.Editor
             if (hud == null) throw new InvalidOperationException("The existing scene has no RewindHud.");
             hud.SetEnglishPreview();
             EditorUtility.SetDirty(hud);
-            PlayerSettings.bundleVersion = "0.2.1";
+            PlayerSettings.bundleVersion = "0.3.0";
             EditorSceneManager.SaveScene(scene, scenePath);
             AssetDatabase.SaveAssets();
             AssetDatabase.ForceReserializeAssets(new[] { Root + "/Settings/DemoTuning.asset" });
@@ -92,7 +159,7 @@ namespace RewindRampage.Editor
             SerializedObject serializedHud = new SerializedObject(hud);
             SerializedProperty view = serializedHud.FindProperty("view");
             TextMeshProUGUI nodeStatus = EnsureLabel("Exposure / volatile status", hud.transform, new Vector2(0.5f, 1f),
-                new Vector2(0f, -122f), new Vector2(510f, 22f), "DOUBLE EXPOSURE / DEMO v0.2.1", 12f, GameArt.Gold);
+                new Vector2(0f, -122f), new Vector2(510f, 22f), "DOUBLE EXPOSURE / DEMO v0.3", 12f, GameArt.Gold);
             TextMeshProUGUI chainLabel = EnsureLabel("Chain reaction", hud.transform, new Vector2(0.5f, 0.5f),
                 new Vector2(0f, 175f), new Vector2(1000f, 35f), string.Empty, 23f, GameArt.Orange);
             nodeStatus.transform.SetAsFirstSibling();
@@ -102,7 +169,7 @@ namespace RewindRampage.Editor
             serializedHud.ApplyModifiedPropertiesWithoutUndo();
             hud.SetEnglishPreview();
             EditorUtility.SetDirty(hud);
-            PlayerSettings.bundleVersion = "0.2.1";
+            PlayerSettings.bundleVersion = "0.3.0";
             EditorSceneManager.SaveScene(scene, scenePath);
             AssetDatabase.SaveAssets();
             Debug.Log("REWIND RAMPAGE v0.2 scene upgraded in place; English UI, ghost nodes and volatile enemy assets saved.");
@@ -490,7 +557,7 @@ namespace RewindRampage.Editor
             refs.bannerDetail = Label("Combo detail", parent, new Vector2(0.5f, 0.5f), new Vector2(0f, 216f), new Vector2(1200f, 32f),
                 "", 15f, GameArt.White, TextAlignmentOptions.Center);
             refs.nodeStatus = Label("Exposure / volatile status", parent, new Vector2(0.5f, 1f), new Vector2(0f, -122f), new Vector2(510f, 22f),
-                "DOUBLE EXPOSURE / DEMO v0.2.1", 12f, GameArt.Gold, TextAlignmentOptions.Center);
+                "DOUBLE EXPOSURE / DEMO v0.3", 12f, GameArt.Gold, TextAlignmentOptions.Center);
             refs.chainLabel = Label("Chain reaction", parent, new Vector2(0.5f, 0.5f), new Vector2(0f, 175f), new Vector2(1000f, 35f),
                 "", 23f, GameArt.Orange, TextAlignmentOptions.Center);
             refs.flash = Box("Damage flash", parent, Vector2.zero, Vector2.zero, Vector2.zero, Color.clear);
@@ -507,6 +574,7 @@ namespace RewindRampage.Editor
                 "M / SOUND ON", out TextMeshProUGUI muteLabel, false);
             refs.muteLabel = muteLabel;
             hud.Configure(refs);
+            EnsureDuelPresentation(hud);
             return hud;
         }
 
@@ -523,7 +591,7 @@ namespace RewindRampage.Editor
             Box("Case top rule", panel, new Vector2(0f, 1f), Vector2.zero, new Vector2(1120f, 2f), new Color(0.13f, 0.29f, 0.34f));
             Box("Case bottom rule", panel, Vector2.zero, Vector2.zero, new Vector2(1120f, 2f), new Color(0.13f, 0.29f, 0.34f));
             refs.menuTag = Label("Menu eyebrow", panel, new Vector2(0f, 1f), new Vector2(56f, -40f), new Vector2(1000f, 28f),
-                "TAPE 002 / OLD TECH / DEMO v0.2.1", 15f, GameArt.Cyan);
+                "TAPE 003 / OLD TECH / DEMO v0.3", 15f, GameArt.Cyan);
             refs.menuTitle = Label("Menu title", panel, new Vector2(0f, 1f), new Vector2(50f, -102f), new Vector2(750f, 205f),
                 "REWIND\n<color=#FFC242>RAMPAGE</color>", 82f, GameArt.White);
             refs.menuTitle.lineSpacing = -16f;

@@ -46,3 +46,11 @@ MonoBehaviour:
   finalVolatileChance: 0.15
   volatileExplosionRadius: 1.75
   volatileExplosionDamage: 1
+  replaySampleInterval: 0.02
+  ghostBossHealth: 2
+  ghostBossRadius: 0.85
+  ghostBossInvulnerability: 0.7
+  tapeRewindTransition: 1.8
+  tapeCutDuration: 0.4
+  replayWarningLead: 0.5
+  replayClipProtection: 0.5

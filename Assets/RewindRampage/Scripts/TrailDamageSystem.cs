@@ -12,10 +12,12 @@ namespace RewindRampage
         private readonly HashSet<int> hitEnemyIds = new HashSet<int>();
         private readonly ExplosionResolver explosions;
         private bool attackActive;
+        private GhostBossHealth ghostBoss;
 
         public int KillCount { get; private set; }
         public int Score { get; private set; }
         public int RewindId { get; private set; }
+        public void SetBossTarget(GhostBossHealth boss) { ghostBoss = boss; }
 
         public TrailDamageSystem(GameTuning tuning, EnemySpawner enemies, Action<RewindKill> onKill,
             Action<ExplosionEvent, int> onExplosion)
@@ -40,6 +42,7 @@ namespace RewindRampage
         public void Sweep(Vector2 from, Vector2 to)
         {
             if (!attackActive) return;
+            ghostBoss?.HitSegment(from, to, tuning.attackRadius, RewindId);
             float radius = tuning.attackRadius + tuning.enemyRadius;
             IReadOnlyList<EnemyController> pool = enemies.Enemies;
             for (int i = 0; i < pool.Count; i++)
@@ -61,6 +64,7 @@ namespace RewindRampage
         public void ApplyArea(Vector2 position, float radius, int amount, DamageContext context)
         {
             if (!attackActive || context.RewindId != RewindId) return;
+            if (context.Source == DamageSource.GhostNode) ghostBoss?.HitArea(position, radius, RewindId);
             float distance = radius + tuning.enemyRadius;
             for (int i = 0; i < enemies.Enemies.Count; i++)
             {

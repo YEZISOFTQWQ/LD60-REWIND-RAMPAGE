@@ -49,6 +49,7 @@ namespace RewindRampage
         private int nextNodeId;
 
         public IReadOnlyList<GhostNode> Nodes => nodes;
+        public bool IgnoreUnlockDelay { get; set; }
         public int ActiveCount
         {
             get
@@ -74,7 +75,7 @@ namespace RewindRampage
         {
             TrailPoint newerStart = history[newestSegment];
             TrailPoint newerEnd = history[newestSegment + 1];
-            if (!tuning.enableGhostNodes || newerEnd.Time < tuning.ghostNodeUnlockTime) return;
+            if (!tuning.enableGhostNodes || (!IgnoreUnlockDelay && newerEnd.Time < tuning.ghostNodeUnlockTime)) return;
             PruneExpiredNodes(recorder.WindowStart);
 
             // Exclude both the new segment and its immediately adjacent predecessor.
