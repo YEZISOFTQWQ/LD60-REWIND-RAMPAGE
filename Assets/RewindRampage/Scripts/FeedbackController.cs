@@ -71,6 +71,9 @@ namespace RewindRampage
         private float shake;
         private bool attacking;
         private bool paused;
+        private SpriteRenderer rewindHead, rewindHeadGlow;
+        private float rewindVisualTime;
+        private const float RewindFadeDuration = 0.55f;
 
         public bool Muted { get; private set; }
 
@@ -91,6 +94,12 @@ namespace RewindRampage
             rewindGradient = CreateGradient(GameArt.Gold, GameArt.Gold, 0.12f, 0.35f);
             history.colorGradient = normalGradient;
             historyGlow.colorGradient = CreateGradient(GameArt.Cyan, GameArt.Cyan, 0.01f, 0.08f);
+            rewindHead = ReplayVisuals.Sprite("Rewind playhead", transform, art.ring, 1.15f, 14, GameArt.Gold);
+            rewindHeadGlow = ReplayVisuals.Sprite("Rewind playhead glow", transform, art.glow, 2.4f, 10, GameArt.Gold);
+            rewindHeadGlow.sharedMaterial = art.glowMaterial;
+            rewindHead.enabled = rewindHeadGlow.enabled = false;
+            attack.widthMultiplier = 0.24f;
+            attackGlow.widthMultiplier = 1f;
 
             Transform particleRoot = new GameObject("Pooled fragments").transform;
             particleRoot.SetParent(transform, false);
@@ -179,6 +188,7 @@ namespace RewindRampage
 
         public void SetCaptureHighlight(float strength)
         {
+            if (attacking) return;
             Color start = GameArt.Cyan, end = GameArt.Cyan;
             start.a = 0.01f + strength * 0.2f; end.a = 0.08f + strength * 0.2f;
             historyGlow.startColor = start; historyGlow.endColor = end;
@@ -193,9 +203,11 @@ namespace RewindRampage
         public void BeginRewind(IReadOnlyList<TrailPoint> path)
         {
             attacking = true;
+            rewindVisualTime = 0f;
             attackFade = 0f;
             history.positionCount = historyGlow.positionCount = path.Count;
             history.colorGradient = rewindGradient;
+            historyGlow.startColor = historyGlow.endColor = new Color(1f, 0.76f, 0.26f, 0.22f);
             for (int i = 0; i < path.Count; i++) SetHistoryPoint(i, path[i].Position);
             attack.positionCount = attackGlow.positionCount = 0;
             SetAttackAlpha(1f);
@@ -213,6 +225,8 @@ namespace RewindRampage
             attack.positionCount = attackGlow.positionCount = count + 1;
             attack.SetPosition(count, position);
             attackGlow.SetPosition(count, position);
+            rewindHead.transform.position = rewindHeadGlow.transform.position = position;
+            rewindHead.enabled = rewindHeadGlow.enabled = true;
         }
 
         public void SetRewindPitch(float remaining) { rewindSource.pitch = Mathf.Lerp(0.65f, 1.4f, remaining); }
@@ -220,7 +234,7 @@ namespace RewindRampage
         public void FinishRewind()
         {
             attacking = false;
-            attackFade = 0.32f;
+            attackFade = RewindFadeDuration;
             rewindSource.Stop();
             effectsSource.pitch = 0.8f;
             effectsSource.PlayOneShot(startClip, 0.3f);
@@ -229,6 +243,7 @@ namespace RewindRampage
         public void StopRewind()
         {
             attacking = false;
+            if (rewindHead != null) rewindHead.enabled = rewindHeadGlow.enabled = false;
             if (rewindSource != null) rewindSource.Stop();
         }
 
@@ -385,9 +400,20 @@ namespace RewindRampage
             if (!attacking && attackFade > 0f)
             {
                 attackFade = Mathf.Max(0f, attackFade - deltaTime);
-                SetAttackAlpha(attackFade / 0.32f);
+                SetAttackAlpha(attackFade / RewindFadeDuration);
                 if (attackFade <= 0f) attack.positionCount = attackGlow.positionCount = 0;
             }
+            if (attacking || attackFade > 0f)
+            {
+                rewindVisualTime += deltaTime;
+                float pulse = 0.5f + 0.5f * Mathf.Sin(rewindVisualTime * 26f);
+                float opacity = attacking ? 1f : attackFade / RewindFadeDuration;
+                rewindHead.transform.localScale = Vector3.one * (1.05f + pulse * 0.18f);
+                rewindHeadGlow.transform.localScale = Vector3.one * (2.2f + pulse * 0.35f);
+                rewindHead.color = new Color(1f, 0.88f, 0.5f, opacity * 0.9f);
+                rewindHeadGlow.color = new Color(1f, 0.7f, 0.2f, opacity * 0.3f);
+            }
+            else rewindHead.enabled = rewindHeadGlow.enabled = false;
             shake = Mathf.MoveTowards(shake, 0f, deltaTime * 0.65f);
             Vector2 offset = paused ? Vector2.zero : Random.insideUnitCircle * shake;
             arenaCamera.transform.position = cameraOrigin + (Vector3)offset;
@@ -398,7 +424,7 @@ namespace RewindRampage
             Color color = GameArt.Gold;
             color.a = fraction;
             attack.startColor = attack.endColor = color;
-            color.a = fraction * 0.18f;
+            color.a = fraction * 0.3f;
             attackGlow.startColor = attackGlow.endColor = color;
         }
 

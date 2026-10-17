@@ -27,6 +27,9 @@ namespace RewindRampage
         public event Action<Vector2, float, bool> PositionObserved;
 
         public bool IsRewinding { get; private set; }
+        public float RemainingTapeDuration => IsRewinding && activePath.Count > 1 ? Mathf.Max(0f, playbackTime - activePath[0].Time) : 0f;
+        public float PlaybackFraction => IsRewinding && activePath.Count > 1
+            ? Mathf.InverseLerp(activePath[0].Time, activePath[activePath.Count - 1].Time, playbackTime) : 0f;
         public float CooldownRemaining => cooldownRemaining;
         public float CooldownFraction => tuning.rewindCooldown <= 0f ? 0f : cooldownRemaining / tuning.rewindCooldown;
         public bool IsReady => !IsRewinding && cooldownRemaining <= 0f && recorder.MovingDuration + 0.0001f >= tuning.minimumMovingDuration;

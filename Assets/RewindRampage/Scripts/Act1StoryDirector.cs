@@ -36,7 +36,7 @@ namespace RewindRampage
         private readonly LineRenderer scan;
         private readonly SpriteRenderer[] afterimages = new SpriteRenderer[4];
         private readonly float[] afterimageLife = new float[4];
-        private readonly Queue<string> behaviorMessages = new Queue<string>();
+        private readonly Queue<string> messages = new Queue<string>();
         private int cueIndex, imageIndex;
         private float bootTime, pulse, glitch, scanRemaining, highlight, nextImage, messageRemaining;
         private bool active, traceShown, rewindShown;
@@ -90,18 +90,17 @@ namespace RewindRampage
             if (!traceShown && trail.MovingDuration + 0.0001f >= tuning.minimumMovingDuration)
             {
                 traceShown = true; highlight = 0.8f;
-                behaviorMessages.Enqueue("TEMPORAL TRACE ESTABLISHED.");
+                messages.Enqueue("TEMPORAL TRACE ESTABLISHED.");
             }
             if (!rewindShown && rewindCount > 0)
             {
                 rewindShown = true;
-                behaviorMessages.Enqueue("TEMPORAL DISPLACEMENT CONFIRMED.\nSUBJECT RESPONSE: VALID.");
+                messages.Enqueue("TEMPORAL DISPLACEMENT CONFIRMED.\nSUBJECT RESPONSE: VALID.");
             }
-            bool timedCue = false;
             while (cueIndex < Cues.Length && elapsed >= Cues[cueIndex].Time)
             {
                 Cue cue = Cues[cueIndex++];
-                if (cue.Text.Length > 0) { Message(cue.Text); timedCue = true; }
+                if (cue.Text.Length > 0) messages.Enqueue(cue.Text);
                 if (cue.Time == 25f || cue.Time == 45f || cue.Time == 70f)
                 {
                     Afterimage(player.Position + (cue.Time == 45f ? new Vector2(0.35f, 0.12f) : Vector2.zero), cue.Time == 45f);
@@ -110,7 +109,7 @@ namespace RewindRampage
                 if (cue.Time == 30f || cue.Time == 60f) { pulse = 0.65f; scanRemaining = 1.2f; }
                 if (cue.Time == 80f) { pulse = 0.4f; glitch = 0.2f; }
             }
-            if (!timedCue && messageRemaining <= 0f && behaviorMessages.Count > 0) Message(behaviorMessages.Dequeue());
+            if (messageRemaining <= 0f && messages.Count > 0) Message(messages.Dequeue());
             if (elapsed >= nextImage && elapsed < tuning.roundDuration)
             {
                 nextImage += 2.5f;
@@ -123,7 +122,7 @@ namespace RewindRampage
 
         private void Message(string text)
         {
-            messageRemaining = text.Contains("\n") ? 3.6f : 2.4f;
+            messageRemaining = text.Contains("\n") ? 5.5f : 4.5f;
             hud.ShowStoryMessage(text, messageRemaining);
         }
 
@@ -188,7 +187,7 @@ namespace RewindRampage
         {
             active = IsBooting = false;
             messageRemaining = pulse = glitch = scanRemaining = highlight = 0f;
-            behaviorMessages.Clear();
+            messages.Clear();
             scan.enabled = false;
             for (int i = 0; i < afterimages.Length; i++) { afterimages[i].enabled = false; afterimageLife[i] = 0f; }
             SetArenaVisibility(1f, keepCaptureFrame ? 1f : 0f);

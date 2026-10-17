@@ -18,6 +18,186 @@ namespace RewindRampage.Editor
         private static GameArt art;
         private static GameTuning tuning;
 
+        [MenuItem("Rewind Rampage/Upgrade scene to v0.4.3 - Arena clock and full tape")]
+        public static void UpgradeToV043()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before upgrading the scenes.");
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            art = AssetDatabase.LoadAssetAtPath<GameArt>(Root + "/Art/DemoArt.asset");
+            string[] paths = { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/Act3.unity" };
+            foreach (string path in paths)
+            {
+                Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                RewindHud hud = null;
+                foreach (GameObject root in scene.GetRootGameObjects())
+                {
+                    hud = root.GetComponentInChildren<RewindHud>(true);
+                    if (hud != null) break;
+                }
+                if (hud == null) throw new InvalidOperationException("The existing HUD is missing: " + path);
+                EnsureStoryPresentation(hud);
+                if (path == paths[1]) hud.SetArchivePreview(); else hud.SetEnglishPreview();
+                EditorUtility.SetDirty(hud); EditorSceneManager.SaveScene(scene, path);
+            }
+            PlayerSettings.bundleVersion = "0.4.3";
+            AssetDatabase.SaveAssets();
+            EditorSceneManager.OpenScene(paths[0], OpenSceneMode.Single);
+            Debug.Log("REWIND RAMPAGE v0.4.3 saved: world-space clock under actors, milliseconds after 60s, full-width tape and stronger reverse playback. No gameplay tests were run.");
+        }
+
+        private static void Place(RectTransform rect, Vector2 anchor, Vector2 position, Vector2 size)
+        {
+            rect.anchorMin = rect.anchorMax = rect.pivot = anchor;
+            rect.anchoredPosition = position; rect.sizeDelta = size;
+        }
+
+        private static void Horizontal(RectTransform rect, float bottom, float height, float left, float right)
+        {
+            rect.anchorMin = Vector2.zero; rect.anchorMax = new Vector2(1f, 0f); rect.pivot = new Vector2(0.5f, 0f);
+            rect.offsetMin = new Vector2(left, bottom); rect.offsetMax = new Vector2(-right, bottom + height);
+        }
+
+        private static TextMeshPro WorldClockText(string name, Transform parent, float fontSize, Vector2 size, TextAlignmentOptions alignment)
+        {
+            Transform existing = parent.Find(name);
+            TextMeshPro text = existing != null ? existing.GetComponent<TextMeshPro>() : new GameObject(name).AddComponent<TextMeshPro>();
+            text.transform.SetParent(parent, false);
+            text.font = art.font; text.fontSize = fontSize; text.enableAutoSizing = false;
+            text.enableWordWrapping = false; text.overflowMode = TextOverflowModes.Overflow;
+            text.alignment = alignment; text.color = new Color(0.9f, 0.96f, 0.96f, 0.18f);
+            text.rectTransform.anchorMin = text.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            text.rectTransform.pivot = alignment == TextAlignmentOptions.Left ? new Vector2(0f, 0.5f) : new Vector2(0.5f, 0.5f);
+            text.rectTransform.sizeDelta = size;
+            MeshRenderer renderer = text.GetComponent<MeshRenderer>();
+            renderer.sortingOrder = -15;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            return text;
+        }
+
+        private static void EnsureDisplayPresentation(RewindHud hud)
+        {
+            SerializedObject serializedHud = new SerializedObject(hud);
+            SerializedProperty view = serializedHud.FindProperty("view");
+            void Assign(string field, UnityEngine.Object value) { view.FindPropertyRelative(field).objectReferenceValue = value; }
+            Transform arena = null;
+            foreach (GameObject root in hud.gameObject.scene.GetRootGameObjects())
+                if (root.name == "Arena - dark signal grid") { arena = root.transform; break; }
+            if (arena == null) throw new InvalidOperationException("The existing arena is missing.");
+            Transform clockRoot = arena.Find("Arena clock - underlay");
+            if (clockRoot == null) clockRoot = new GameObject("Arena clock - underlay", typeof(RectTransform)).transform;
+            clockRoot.SetParent(arena, false); clockRoot.localPosition = Vector3.zero;
+            ((RectTransform)clockRoot).sizeDelta = new Vector2(29.2f, 14.4f);
+            TextMeshPro clock = WorldClockText("Elapsed clock", clockRoot, 52f, new Vector2(28f, 6f), TextAlignmentOptions.Center);
+            clock.text = "00:00"; clock.rectTransform.anchoredPosition = Vector2.zero;
+            TextMeshPro milliseconds = WorldClockText("Milliseconds", clockRoot, 27f, new Vector2(12f, 6f), TextAlignmentOptions.Left);
+            milliseconds.text = ".000"; milliseconds.alpha = 0f;
+            milliseconds.rectTransform.anchoredPosition = new Vector2(clock.GetPreferredValues("00:00").x * 0.5f + 0.2f, -0.7f);
+            Assign("timer", clock); Assign("timerMilliseconds", milliseconds);
+            hud.transform.Find("Round countdown").gameObject.SetActive(false);
+            ((TextMeshProUGUI)view.FindPropertyRelative("roundTimeLabel").objectReferenceValue).gameObject.SetActive(false);
+            Debug.Log("Arena clock authored at sorting order -15; numeric width " + clock.GetPreferredValues("00:00").x + ", millisecond width " + milliseconds.GetPreferredValues(".000").x);
+
+            Transform tape = hud.transform.Find("Tape deck");
+            Horizontal((RectTransform)tape, 0f, 154f, 24f, 24f);
+            UnityEngine.UI.Image tapeBackground = tape.Find("Tape background").GetComponent<UnityEngine.UI.Image>();
+            Stretch(tapeBackground.rectTransform);
+            UnityEngine.UI.Image trim = tape.Find("Tape top trim").GetComponent<UnityEngine.UI.Image>();
+            Horizontal(trim.rectTransform, 152f, 2f, 0f, 0f);
+            Assign("tapeBackground", tapeBackground); Assign("tapeTrim", trim);
+            SerializedProperty reels = view.FindPropertyRelative("reels");
+            for (int i = 0; i < reels.arraySize; i++)
+            {
+                RectTransform reel = (RectTransform)reels.GetArrayElementAtIndex(i).objectReferenceValue;
+                Place(reel, new Vector2(i == 0 ? 0f : 1f, 0.5f), new Vector2(i == 0 ? 70f : -70f, 16f), Vector2.one * 41f);
+                reel.pivot = new Vector2(0.5f, 0.5f); reel.localScale = Vector3.one * 1.8f;
+            }
+            Transform track = tape.Find("Tape track");
+            if (track == null) track = Rect("Tape track", tape, Vector2.zero, Vector2.zero, Vector2.zero);
+            Horizontal((RectTransform)track, 62f, 28f, 160f, 160f);
+            if (track.GetComponent<UnityEngine.UI.RectMask2D>() == null) track.gameObject.AddComponent<UnityEngine.UI.RectMask2D>();
+            SerializedProperty samples = view.FindPropertyRelative("tapeSegments");
+            for (int i = 0; i < samples.arraySize; i++)
+            {
+                UnityEngine.UI.Image sample = (UnityEngine.UI.Image)samples.GetArrayElementAtIndex(i).objectReferenceValue;
+                sample.transform.SetParent(track, false);
+                sample.rectTransform.anchorMin = new Vector2(i / (float)samples.arraySize, 0f);
+                sample.rectTransform.anchorMax = new Vector2((i + 1f) / samples.arraySize, 1f);
+                sample.rectTransform.offsetMin = new Vector2(2f, 0f); sample.rectTransform.offsetMax = new Vector2(-2f, 0f);
+            }
+            TextMeshProUGUI flow = EnsureLabel("Tape reverse arrows", track, new Vector2(0.5f, 0.5f), Vector2.zero,
+                new Vector2(220f, 40f), "<<< <<<", 28f, GameArt.Gold);
+            flow.gameObject.SetActive(false); Assign("tapeFlowMarker", flow.rectTransform);
+            TextMeshProUGUI ability = (TextMeshProUGUI)view.FindPropertyRelative("abilityLabel").objectReferenceValue;
+            Place(ability.rectTransform, new Vector2(0f, 1f), new Vector2(160f, -16f), new Vector2(600f, 34f)); ability.fontSize = 25f;
+            TextMeshProUGUI tapeTime = (TextMeshProUGUI)view.FindPropertyRelative("tapeTime").objectReferenceValue;
+            Place(tapeTime.rectTransform, Vector2.one, new Vector2(-160f, -18f), new Vector2(430f, 30f));
+            tapeTime.fontSize = 18f; tapeTime.alignment = TextAlignmentOptions.Right;
+            TextMeshProUGUI format = tape.Find("Tape format").GetComponent<TextMeshProUGUI>();
+            Place(format.rectTransform, new Vector2(0f, 1f), new Vector2(20f, -8f), new Vector2(100f, 18f));
+            format.fontSize = 10f; format.alignment = TextAlignmentOptions.Center;
+            TextMeshProUGUI controls = hud.transform.Find("Controls").GetComponent<TextMeshProUGUI>();
+            Place(controls.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 17f), new Vector2(750f, 24f));
+            controls.text = "[W A S D] MOVE   [SPACE] REWIND   [ESC] PAUSE"; controls.fontSize = 14f; controls.alignment = TextAlignmentOptions.Center;
+            hud.transform.Find("Pause hint").gameObject.SetActive(false);
+            UnityEngine.UI.Button god = (UnityEngine.UI.Button)view.FindPropertyRelative("godMode").objectReferenceValue;
+            Place(god.GetComponent<RectTransform>(), Vector2.zero, new Vector2(36f, 14f), new Vector2(230f, 28f));
+            UnityEngine.UI.Button mute = (UnityEngine.UI.Button)view.FindPropertyRelative("mute").objectReferenceValue;
+            Place(mute.GetComponent<RectTransform>(), new Vector2(1f, 0f), new Vector2(-36f, 14f), new Vector2(170f, 28f));
+            TextMeshProUGUI score = (TextMeshProUGUI)view.FindPropertyRelative("score").objectReferenceValue;
+            Place(score.rectTransform, Vector2.one, new Vector2(-64f, -56f), new Vector2(260f, 48f));
+            Place(hud.transform.Find("Score label").GetComponent<RectTransform>(), Vector2.one, new Vector2(-64f, -30f), new Vector2(200f, 24f));
+            Place(((TextMeshProUGUI)view.FindPropertyRelative("instructions").objectReferenceValue).rectTransform,
+                new Vector2(0.5f, 0f), new Vector2(0f, 180f), new Vector2(1380f, 34f));
+            TextMeshProUGUI notice = (TextMeshProUGUI)view.FindPropertyRelative("notice").objectReferenceValue;
+            Place(notice.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 220f), new Vector2(1380f, 36f)); notice.fontSize = 22f;
+            Place(((TextMeshProUGUI)view.FindPropertyRelative("bannerTitle").objectReferenceValue).rectTransform,
+                new Vector2(0.5f, 0.5f), new Vector2(0f, 155f), new Vector2(1200f, 60f));
+            Place(((TextMeshProUGUI)view.FindPropertyRelative("bannerDetail").objectReferenceValue).rectTransform,
+                new Vector2(0.5f, 0.5f), new Vector2(0f, 105f), new Vector2(1200f, 32f));
+            Place(((TextMeshProUGUI)view.FindPropertyRelative("chainLabel").objectReferenceValue).rectTransform,
+                new Vector2(0.5f, 0.5f), new Vector2(0f, 205f), new Vector2(1200f, 35f));
+
+            TextMeshProUGUI message = (TextMeshProUGUI)view.FindPropertyRelative("storyMessage").objectReferenceValue;
+            Place(message.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -161f), new Vector2(1200f, 112f));
+            message.fontSize = 26f; message.lineSpacing = 6f;
+            Transform story = message.transform.parent;
+            Transform backdropTransform = story.Find("Terminal backdrop");
+            UnityEngine.UI.Image backdrop = backdropTransform != null ? backdropTransform.GetComponent<UnityEngine.UI.Image>()
+                : Box("Terminal backdrop", story, new Vector2(0.5f, 1f), new Vector2(0f, -150f), new Vector2(1240f, 128f), Color.clear);
+            backdrop.transform.SetAsFirstSibling(); Assign("storyBackdrop", backdrop);
+            ((TextMeshProUGUI)view.FindPropertyRelative("bootTerminal").objectReferenceValue).fontSize = 28f;
+            ((TextMeshProUGUI)view.FindPropertyRelative("bootHeadline").objectReferenceValue).fontSize = 40f;
+            TextMeshProUGUI duelTitle = (TextMeshProUGUI)view.FindPropertyRelative("duelTitle").objectReferenceValue;
+            Place(duelTitle.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 100f), new Vector2(1450f, 80f)); duelTitle.fontSize = 44f;
+            TextMeshProUGUI duelDetail = (TextMeshProUGUI)view.FindPropertyRelative("duelDetail").objectReferenceValue;
+            Place(duelDetail.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, -10f), new Vector2(1400f, 95f)); duelDetail.fontSize = 26f;
+            Place(((TextMeshProUGUI)view.FindPropertyRelative("duelTapeTime").objectReferenceValue).rectTransform,
+                new Vector2(0.5f, 0.5f), new Vector2(0f, -135f), new Vector2(600f, 60f));
+
+            Transform overlay = hud.transform.Find("Rewind overlay");
+            if (overlay == null) { overlay = Rect("Rewind overlay", hud.transform, Vector2.zero, Vector2.zero, Vector2.zero); Stretch((RectTransform)overlay); }
+            CanvasGroup group = overlay.GetComponent<CanvasGroup>(); if (group == null) group = overlay.gameObject.AddComponent<CanvasGroup>();
+            group.alpha = 0f; group.blocksRaycasts = group.interactable = false;
+            Transform washTransform = overlay.Find("Rewind wash");
+            UnityEngine.UI.Image wash = washTransform != null ? washTransform.GetComponent<UnityEngine.UI.Image>()
+                : Box("Rewind wash", overlay, Vector2.zero, Vector2.zero, Vector2.zero, new Color(1f, 0.76f, 0.26f, 0.045f));
+            Stretch(wash.rectTransform);
+            SerializedProperty bands = view.FindPropertyRelative("rewindBands"); bands.arraySize = 4;
+            for (int i = 0; i < 4; i++)
+            {
+                Transform existing = overlay.Find("Reverse sweep " + i);
+                UnityEngine.UI.Image band = existing != null ? existing.GetComponent<UnityEngine.UI.Image>()
+                    : Box("Reverse sweep " + i, overlay, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1600f, 12f), new Color(1f, 0.8f, 0.4f, 0.075f));
+                bands.GetArrayElementAtIndex(i).objectReferenceValue = band.rectTransform;
+            }
+            EnsureLabel("Rewind caption", overlay, new Vector2(0.5f, 0.5f), new Vector2(0f, -235f), new Vector2(1200f, 70f), "<<< REWIND", 44f, GameArt.Gold);
+            Assign("rewindOverlay", group);
+            GameObject menu = (GameObject)view.FindPropertyRelative("menu").objectReferenceValue;
+            overlay.SetSiblingIndex(menu.transform.GetSiblingIndex()); overlay.gameObject.SetActive(false);
+            serializedHud.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         [MenuItem("Rewind Rampage/Upgrade scene to v0.4.2 - Act I story")]
         public static void UpgradeToV042()
         {
@@ -42,7 +222,7 @@ namespace RewindRampage.Editor
                 EditorUtility.SetDirty(manager); EditorUtility.SetDirty(hud);
                 EditorSceneManager.SaveScene(scene, path);
             }
-            PlayerSettings.bundleVersion = "0.4.2";
+            PlayerSettings.bundleVersion = "0.4.3";
             tuning = AssetDatabase.LoadAssetAtPath<GameTuning>(Root + "/Settings/DemoTuning.asset");
             EditorUtility.SetDirty(tuning);
             AssetDatabase.SaveAssets();
@@ -100,7 +280,7 @@ namespace RewindRampage.Editor
             List<CanvasGroup> fades = new List<CanvasGroup>();
             foreach (Transform child in hud.transform)
             {
-                if (child == boot || child == story || child.gameObject == menu || child.gameObject == duel || child == god.transform) continue;
+                if (child == boot || child == story || child.gameObject == menu || child.gameObject == duel || child == god.transform || child.name == "Rewind overlay") continue;
                 CanvasGroup group = child.GetComponent<CanvasGroup>();
                 if (group == null) group = child.gameObject.AddComponent<CanvasGroup>();
                 group.alpha = 1f; fades.Add(group);
@@ -109,6 +289,7 @@ namespace RewindRampage.Editor
             for (int i = 0; i < fades.Count; i++) fadeArray.GetArrayElementAtIndex(i).objectReferenceValue = fades[i];
             serializedHud.ApplyModifiedPropertiesWithoutUndo();
             ((TextMeshProUGUI)view.FindPropertyRelative("duelDetail").objectReferenceValue).lineSpacing = 10f;
+            EnsureDisplayPresentation(hud);
         }
 
         private static UnityEngine.UI.Image StoryEdge(Transform parent, string name, Vector2 min, Vector2 max, Vector2 low, Vector2 high)
@@ -146,7 +327,7 @@ namespace RewindRampage.Editor
                 EditorUtility.SetDirty(hud);
                 EditorSceneManager.SaveScene(scene, path);
             }
-            PlayerSettings.bundleVersion = "0.4.2";
+            PlayerSettings.bundleVersion = "0.4.3";
             AssetDatabase.SaveAssets();
             AssetDatabase.ForceReserializeAssets(new[] { tuningPath });
             EditorSceneManager.OpenScene(scenes[0], OpenSceneMode.Single);
@@ -180,7 +361,7 @@ namespace RewindRampage.Editor
             UpgradeArchiveScene(archive, GameAct.Archive);
             EditorSceneManager.SaveScene(archive, archivePath);
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(mainPath, true), new EditorBuildSettingsScene(archivePath, true) };
-            PlayerSettings.bundleVersion = "0.4.2";
+            PlayerSettings.bundleVersion = "0.4.3";
             AssetDatabase.SaveAssets();
             EditorSceneManager.OpenScene(mainPath, OpenSceneMode.Single);
             Debug.Log("REWIND RAMPAGE v0.4 saved: independent Act3 scene, direct menu entry and development F3. No gameplay tests were run.");
@@ -250,7 +431,7 @@ namespace RewindRampage.Editor
             EnsureDuelPresentation(hud);
             hud.SetEnglishPreview();
             EditorUtility.SetDirty(hud);
-            PlayerSettings.bundleVersion = "0.4.2";
+            PlayerSettings.bundleVersion = "0.4.3";
             EditorSceneManager.SaveScene(scene, scenePath);
             AssetDatabase.SaveAssets();
             Debug.Log("REWIND RAMPAGE v0.3 upgraded in place; playback duel UI and tuning saved. No gameplay tests were run.");
@@ -306,7 +487,7 @@ namespace RewindRampage.Editor
             if (hud == null) throw new InvalidOperationException("The existing scene has no RewindHud.");
             hud.SetEnglishPreview();
             EditorUtility.SetDirty(hud);
-            PlayerSettings.bundleVersion = "0.4.2";
+            PlayerSettings.bundleVersion = "0.4.3";
             EditorSceneManager.SaveScene(scene, scenePath);
             AssetDatabase.SaveAssets();
             AssetDatabase.ForceReserializeAssets(new[] { Root + "/Settings/DemoTuning.asset" });
@@ -360,7 +541,7 @@ namespace RewindRampage.Editor
             SerializedObject serializedHud = new SerializedObject(hud);
             SerializedProperty view = serializedHud.FindProperty("view");
             TextMeshProUGUI nodeStatus = EnsureLabel("Exposure / volatile status", hud.transform, new Vector2(0.5f, 1f),
-                new Vector2(0f, -122f), new Vector2(510f, 22f), "DOUBLE EXPOSURE / DEMO v0.4.2", 12f, GameArt.Gold);
+                new Vector2(0f, -122f), new Vector2(510f, 22f), "DOUBLE EXPOSURE / DEMO v0.4.3", 12f, GameArt.Gold);
             TextMeshProUGUI chainLabel = EnsureLabel("Chain reaction", hud.transform, new Vector2(0.5f, 0.5f),
                 new Vector2(0f, 175f), new Vector2(1000f, 35f), string.Empty, 23f, GameArt.Orange);
             nodeStatus.transform.SetAsFirstSibling();
@@ -370,7 +551,7 @@ namespace RewindRampage.Editor
             serializedHud.ApplyModifiedPropertiesWithoutUndo();
             hud.SetEnglishPreview();
             EditorUtility.SetDirty(hud);
-            PlayerSettings.bundleVersion = "0.4.2";
+            PlayerSettings.bundleVersion = "0.4.3";
             EditorSceneManager.SaveScene(scene, scenePath);
             AssetDatabase.SaveAssets();
             Debug.Log("REWIND RAMPAGE v0.2 scene upgraded in place; English UI, ghost nodes and volatile enemy assets saved.");
@@ -762,7 +943,7 @@ namespace RewindRampage.Editor
             refs.bannerDetail = Label("Combo detail", parent, new Vector2(0.5f, 0.5f), new Vector2(0f, 216f), new Vector2(1200f, 32f),
                 "", 15f, GameArt.White, TextAlignmentOptions.Center);
             refs.nodeStatus = Label("Exposure / volatile status", parent, new Vector2(0.5f, 1f), new Vector2(0f, -122f), new Vector2(510f, 22f),
-                "DOUBLE EXPOSURE / DEMO v0.4.2", 12f, GameArt.Gold, TextAlignmentOptions.Center);
+                "DOUBLE EXPOSURE / DEMO v0.4.3", 12f, GameArt.Gold, TextAlignmentOptions.Center);
             refs.chainLabel = Label("Chain reaction", parent, new Vector2(0.5f, 0.5f), new Vector2(0f, 175f), new Vector2(1000f, 35f),
                 "", 23f, GameArt.Orange, TextAlignmentOptions.Center);
             refs.flash = Box("Damage flash", parent, Vector2.zero, Vector2.zero, Vector2.zero, Color.clear);
@@ -798,7 +979,7 @@ namespace RewindRampage.Editor
             Box("Case top rule", panel, new Vector2(0f, 1f), Vector2.zero, new Vector2(1120f, 2f), new Color(0.13f, 0.29f, 0.34f));
             Box("Case bottom rule", panel, Vector2.zero, Vector2.zero, new Vector2(1120f, 2f), new Color(0.13f, 0.29f, 0.34f));
             refs.menuTag = Label("Menu eyebrow", panel, new Vector2(0f, 1f), new Vector2(56f, -40f), new Vector2(1000f, 28f),
-                "TAPE 004 / OLD TECH / DEMO v0.4.2", 15f, GameArt.Cyan);
+                "TAPE 004 / OLD TECH / DEMO v0.4.3", 15f, GameArt.Cyan);
             refs.menuTitle = Label("Menu title", panel, new Vector2(0f, 1f), new Vector2(50f, -102f), new Vector2(750f, 205f),
                 "REWIND\n<color=#FFC242>RAMPAGE</color>", 82f, GameArt.White);
             refs.menuTitle.lineSpacing = -16f;
