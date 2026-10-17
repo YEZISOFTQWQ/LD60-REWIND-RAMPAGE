@@ -491,9 +491,15 @@ namespace RewindRampage
 
         public void ArchiveCoreImpact(Vector2 position, bool destroyed)
         {
-            Burst(position, GameArt.Gold, destroyed ? 80 : 30, destroyed ? 8f : 5f);
+            Burst(position, destroyed ? Color.white : GameArt.Gold, destroyed ? 80 : 30, destroyed ? 8f : 5f);
             effectsSource.PlayOneShot(paradoxClip, destroyed ? 0.85f : 0.6f);
             shake = destroyed ? 0.3f : 0.2f;
+        }
+
+        public void TemporalCollision(Vector2 position)
+        {
+            Burst(position, GameArt.Cyan, 70, 8f); Burst(position, GameArt.Red, 70, 8f);
+            effectsSource.PlayOneShot(hurtClip, 1f); shake = 0.6f;
         }
 
         public void SetPaused(bool value)

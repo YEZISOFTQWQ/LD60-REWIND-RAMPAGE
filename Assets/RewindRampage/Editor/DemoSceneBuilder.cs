@@ -18,6 +18,15 @@ namespace RewindRampage.Editor
         private static GameArt art;
         private static GameTuning tuning;
 
+        [MenuItem("Rewind Rampage/Upgrade to v0.6.1 - Act III finale")]
+        public static void UpgradeToV061()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before updating the project version.");
+            PlayerSettings.bundleVersion = "0.6.1";
+            AssetDatabase.SaveAssets();
+            Debug.Log("REWIND RAMPAGE v0.6.1 saved: temporal collision, restored Echo populations and shared instance visuals. No gameplay tests were run.");
+        }
+
         [MenuItem("Rewind Rampage/Upgrade to v0.5.0 - Act II story")]
         public static void UpgradeToV050()
         {

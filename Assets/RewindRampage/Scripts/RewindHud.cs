@@ -8,7 +8,7 @@ namespace RewindRampage
     public sealed class RewindHud : MonoBehaviour
     {
         public const string TitleInstructions = "WASD records 3 seconds. SPACE rewinds to attack.\nREC: survive. PLAYBACK: erase your recorded self.\nTHE ARCHIVE: break the core and survive to 00:00.";
-        private static readonly string[] ArchivePhases = { "ACT III / THE ARCHIVE / AWAKENING", "ACT III / THE ARCHIVE / THE HUNT", "ACT III / THE ARCHIVE / COLLAPSE" };
+        private static readonly string[] ArchivePhases = { "ACT III / ERASE / AWAKENING", "ACT III / ERASE / INTERFERENCE", "ACT III / ERASE / SYSTEM COLLAPSE" };
         [Serializable]
         public sealed class References
         {
@@ -131,7 +131,7 @@ namespace RewindRampage
             switch (game.State)
             {
                 case SessionState.Title:
-                    view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.5.0";
+                    view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.6.1";
                     view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
                     view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
                     view.menuInstructions.text = TitleInstructions;
@@ -149,12 +149,12 @@ namespace RewindRampage
                 case SessionState.Results:
                     if (game.InArchive)
                     {
-                        view.menuTag.text = game.Survived ? "ARCHIVE ERASED / FINAL TAPE COMPLETE" : "THE ARCHIVE / SUBJECT REJECTED";
-                        view.menuTitle.text = game.Survived ? "TIME\n<color=#FFC242>RELEASED</color>" : "ARCHIVE\n<color=#FF4864>REJECTED</color>";
-                        view.menuLead.text = game.Survived ? "NO MORE ECHOES. NO MORE REWINDS." : game.Player.Health <= 0 ? "YOUR SIGNAL WAS ERASED." : "TIME EXPIRED. THE CORE REMAINS.";
+                        view.menuTag.text = game.Survived ? "END OF THE RECORD / ARCHIVE CLOSED" : "THE ARCHIVE / OPERATION TERMINATED";
+                        view.menuTitle.text = game.Survived ? "REWIND\n<color=#FFC242>RAMPAGE</color>" : game.Player.Health <= 0 ? "PURGE\n<color=#FF4864>FAILED</color>" : "ERASURE\n<color=#FF4864>COMPLETE</color>";
+                        view.menuLead.text = game.Survived ? "BUT THE RECORDING HAS ENDED." : game.Player.Health <= 0 ? "OPERATOR SIGNAL LOST. INSTANCE TERMINATED." : "PURGE COMMAND EXECUTED. OPERATOR INSTANCE ERASED.";
                         view.menuInstructions.text = game.Survived
-                            ? "Core destroyed. Subject survived until 00:00.\nThe archive collapses into magnetic silence.\nEND OF TAPE."
-                            : "Break the core with three separate rewinds.\nDestroying it does not stop the Echoes or the clock.\nRetry restarts THE ARCHIVE at 01:30.";
+                            ? "> ORIGINAL SUBJECT: DECEASED.\n> CURRENT INSTANCE: RECONSTRUCTED.\n> ACTIVE RECORDING: NONE.\nIDENTITY VERIFICATION NO LONGER REQUIRED."
+                            : "One remaining life. Break the core with three rewinds.\nSurvive until 00:00 after destroying it.\nRetry includes the complete temporal collision opening.";
                         view.menuStats.SetText("SURVIVED {0:1}s / ECHOES ERASED {1} / CORE HP {2}/3", game.Elapsed, game.Archive.EchoKills, game.Archive.Core.Health);
                         view.primaryLabel.text = game.Survived ? "PLAY ARCHIVE AGAIN  >  [ SPACE ]" : "RETRY ARCHIVE  >  [ SPACE ]";
                         break;
@@ -206,13 +206,18 @@ namespace RewindRampage
 
             if (game.Player.Health < previousHealth) damageFlash = 0.55f;
             previousHealth = game.Player.Health;
+            int visibleHealth = game.InArchive ? game.Act3Story.VisibleHealth : game.Player.Health;
             for (int i = 0; i < view.health.Length; i++)
-                view.health[i].color = i < game.Player.Health ? GameArt.Cyan : new Color(0.14f, 0.2f, 0.24f);
+                view.health[i].color = i < visibleHealth ? GameArt.Cyan : new Color(0.14f, 0.2f, 0.24f);
             damageFlash = Mathf.Max(0f, damageFlash - deltaTime);
             Color flashColor = GameArt.Red;
             flashColor.a = damageFlash * 0.2f;
             coreFlash = Mathf.Max(0f, coreFlash - deltaTime);
             if (coreFlash > 0f) flashColor = new Color(0.95f, 0.95f, 1f, coreFlash * 0.65f);
+            if (game.InArchive && game.Act3Story.ScreenFlash > flashColor.a)
+            {
+                flashColor = game.Act3Story.FlashColor; flashColor.a = game.Act3Story.ScreenFlash;
+            }
             view.flash.color = flashColor;
 
             bool rewinding = game.Rewind.IsRewinding;
@@ -255,7 +260,7 @@ namespace RewindRampage
             if (reconstructingTape) view.tapeTime.SetText("<< CAPTURE {0:1}s / 30.0s", 30f * tapeFraction);
 
             float visualDelta = game.State == SessionState.Playing ? deltaTime : 0f;
-            float reelSpeed = game.InDuel && game.Act2Story.IsEnding ? 0f : reversingTape ? -1800f : 90f;
+            float reelSpeed = (game.InDuel && game.Act2Story.IsEnding) || (game.InArchive && game.Act3Story.IsCinematic) ? 0f : reversingTape ? -1800f : 90f;
             for (int i = 0; i < view.reels.Length; i++) view.reels[i].Rotate(0f, 0f, reelSpeed * visualDelta);
             TickRewindPresentation(visualDelta, reversingTape);
 
@@ -328,26 +333,30 @@ namespace RewindRampage
         private void TickTimer(bool reconstructing, float deltaTime)
         {
             bool act1Clock = (!game.InDuel && !game.InArchive) || (reconstructing && game.Duel.TransitionElapsed < 6f);
-            float time = game.InArchive ? game.Archive.Remaining : game.InDuel ? game.Duel.DuelTime : game.Elapsed;
+            float time = game.InArchive ? game.Act3Story.ClockTime : game.InDuel ? game.Duel.DuelTime : game.Elapsed;
             if (reconstructing) time = game.Duel.TransitionElapsed < 6f ? game.Tuning.roundDuration : 0f;
             bool ending = game.InDuel && game.Act2Story.IsEnding;
             float endingTime = ending ? game.Act2Story.EndingElapsed : 0f;
             if (endingTime >= 9.5f) time = Act3Director.Duration;
             float alarm = act1Clock ? Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((time - 60f) / 1.1f)) : 1f;
             float milliseconds = act1Clock ? alarm : 1f;
+            if (game.InArchive && game.Act3Story.IsVictory && game.Act3Story.EndingElapsed >= 7f) alarm = milliseconds = 0f;
             clockBlinkTime += deltaTime;
             float pulse = 0.5f + 0.5f * Mathf.Sin(clockBlinkTime * Mathf.PI * 3f);
             if (game.InDuel && !ending && game.Duel.DuelTime >= 25f) pulse = 0.5f + 0.5f * Mathf.Sin(clockBlinkTime * Mathf.PI * 6f);
+            if (game.InArchive && !game.Act3Story.IsCinematic && game.Archive.Remaining <= 10f) pulse = 0.5f + 0.5f * Mathf.Sin(clockBlinkTime * Mathf.PI * 6f);
             if (game.State == SessionState.Title) clockVisibility = 0f;
             else clockVisibility = Mathf.MoveTowards(clockVisibility, game.StoryBooting ? 0f : 1f, deltaTime * 3f);
             bool reverse = game.Rewind.IsRewinding || (reconstructing && game.Duel.TransitionElapsed >= 2f && game.Duel.TransitionElapsed < 5f);
-            bool hold = game.State == SessionState.Paused || game.StoryBooting || ending || (game.InDuel && game.Duel.IsTransition && !reverse);
+            bool hold = game.State == SessionState.Paused || game.StoryBooting || ending || (game.InArchive && game.Act3Story.IsCinematic) || (game.InDuel && game.Duel.IsTransition && !reverse);
             bool active = game.State == SessionState.Playing || game.State == SessionState.Paused;
             ClockLamps lamps = active ? reverse ? ClockLamps.Rew : game.Act == GameAct.Rec ? ClockLamps.Rec : ClockLamps.None : ClockLamps.None;
             if (game.State == SessionState.Playing && !reverse && !hold) lamps |= ClockLamps.Play;
             if (hold) lamps |= ClockLamps.Pause;
             bool locked = game.InArchive && game.Archive.Core.State != TimeCoreState.Dormant;
             float transitionOpacity = endingTime < 9f ? 1f : endingTime < 9.5f ? 1f - (endingTime - 9f) * 2f : (endingTime - 9.5f) * 2f;
+            view.arenaClock.LampOpacity = game.InArchive ? game.Act3Story.HudOpacity : 1f;
+            if (game.InArchive) transitionOpacity *= game.Act3Story.ClockOpacity;
             view.arenaClock.Display(time, alarm, milliseconds, lamps, locked, clockVisibility * transitionOpacity, pulse);
         }
 
@@ -374,10 +383,25 @@ namespace RewindRampage
 
         private void TickDuelPresentation()
         {
+            bool archiveVisible = game.InArchive && game.State == SessionState.Playing && game.Act3Story.IsCinematic;
             bool ending = game.InDuel && game.Act2Story.IsEnding;
             bool visible = game.InDuel && game.State == SessionState.Playing && (game.Duel.IsTransition || ending);
-            view.duelOverlay.SetActive(visible);
+            view.duelOverlay.SetActive(visible || archiveVisible);
+            view.trackingBar.gameObject.SetActive(true);
             view.scanlines.color = game.InDuel || game.InArchive ? new Color(1f, 1f, 1f, 0.35f) : Color.white;
+            if (archiveVisible)
+            {
+                Act3StoryDirector sequence = game.Act3Story;
+                bool freeTime = sequence.IsVictory && sequence.EndingElapsed >= 7f && sequence.EndingElapsed < 10f;
+                view.duelTitle.text = sequence.Title; view.duelTitle.color = sequence.IsVictory ? GameArt.White : GameArt.Red;
+                view.duelDetail.text = sequence.Detail;
+                view.duelTapeTime.text = freeTime || (sequence.IsVictory && sequence.EndingElapsed >= 10f) ? "" : sequence.IsOpening ? "ERASE / 01:30" : "TAPE TRANSPORT STOPPED";
+                float darkness = sequence.IsVictory && sequence.EndingElapsed >= 10f ? Mathf.Clamp01((sequence.EndingElapsed - 10f) / 2f) : freeTime ? 0f : 0.12f;
+                view.duelBackdrop.color = new Color(0.008f, 0.008f, 0.02f, darkness);
+                view.trackingBar.gameObject.SetActive(!freeTime && !(sequence.IsVictory && sequence.EndingElapsed >= 4f));
+                view.trackingBar.rectTransform.anchoredPosition = new Vector2(0f, Mathf.PingPong(uiTime * 1900f, 1000f) - 500f);
+                return;
+            }
             if (!visible)
             {
                 return;
@@ -415,6 +439,19 @@ namespace RewindRampage
                 if (time >= 5f && time < 5.2f) view.flash.color = new Color(1f, 1f, 1f, (5.2f - time) * 3.5f);
             }
             else SetStoryEffects(false, 0f, 0f);
+        }
+
+        public void SetArchiveHudOpacity(float opacity)
+        {
+            foreach (CanvasGroup group in view.bootFades) group.alpha = opacity;
+            view.godMode.gameObject.SetActive(opacity > 0.01f);
+        }
+
+        public void SetArchiveIntegrity(int health, float opacity)
+        {
+            view.storyCapture.SetText("HP: {0}/3 / ERASE", health);
+            view.storyCapture.color = health <= 1 ? GameArt.Red : GameArt.White;
+            view.storyCapture.alpha = opacity;
         }
 
         public void SetBootPresentation(float time)
@@ -496,7 +533,7 @@ namespace RewindRampage
 
         public void SetEnglishPreview()
         {
-            view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.5.0";
+            view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.6.1";
             view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
             view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
             view.menuInstructions.text = TitleInstructions;
@@ -512,7 +549,7 @@ namespace RewindRampage
             view.godModeLabel.text = "F2 / GOD MODE OFF";
             ClearStoryPresentation();
             view.notice.text = view.bannerTitle.text = view.bannerDetail.text = view.chainLabel.text = string.Empty;
-            view.nodeStatus.text = "REC / PLAYBACK / THE ARCHIVE / DEMO v0.5.0";
+            view.nodeStatus.text = "REC / PLAYBACK / THE ARCHIVE / DEMO v0.6.1";
         }
 
         public void SetArchivePreview()

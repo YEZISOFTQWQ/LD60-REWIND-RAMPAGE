@@ -25,7 +25,7 @@ namespace RewindRampage
             get { int count = 0; foreach (EchoAIController echo in echoes) if (echo.State == EchoState.Rewind) count++; return count; }
         }
 
-        public EchoSpawnDirector(GameTuning tuning, GameArt art, PlayerController player, FeedbackController feedback, Action<Vector2> onPlayerHit)
+        public EchoSpawnDirector(GameTuning tuning, GameArt art, PlayerController player, FeedbackController feedback, Action<Vector2> onPlayerHit, Action onWarning = null)
         {
             this.tuning = tuning; this.player = player;
             Transform root = new GameObject("Archive Echo pool").transform;
@@ -35,7 +35,7 @@ namespace RewindRampage
             warningTexture.Apply();
             warningMaterial = new Material(art.lineMaterial) { name = "Echo warning material", mainTexture = warningTexture };
             for (int i = 0; i < EchoPhaseSettings.ForPhase(2).Population; i++)
-                echoes.Add(new EchoAIController(i, tuning, art, player, feedback, root, warningMaterial, onPlayerHit));
+                echoes.Add(new EchoAIController(i, tuning, art, player, feedback, root, warningMaterial, onPlayerHit, onWarning));
             reserveCheck = CanReserveAttack;
         }
 
@@ -104,6 +104,11 @@ namespace RewindRampage
         }
 
         public void TickVisual(float deltaTime) { foreach (EchoAIController echo in echoes) echo.TickVisual(deltaTime); }
+        public void Halt() { foreach (EchoAIController echo in echoes) echo.Halt(); }
+        public void SetStoryPresentation(float opacity, float offset)
+        {
+            for (int i = 0; i < echoes.Count; i++) echoes[i].SetStoryPresentation(opacity, offset * (i % 2 == 0 ? 1f : -1f));
+        }
         public void Stop() { foreach (EchoAIController echo in echoes) echo.Despawn(); spawnWait = 0f; }
         public void Dispose() { UnityEngine.Object.Destroy(warningMaterial); UnityEngine.Object.Destroy(warningTexture); }
     }

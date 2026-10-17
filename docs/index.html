@@ -11,7 +11,7 @@
 <body>
   <main>
     <header>
-      <div class="brand"><span class="mark" aria-hidden="true">&lt;&lt;</span><div><h1>REWIND <span>RAMPAGE</span></h1><p>TAPE 004 / OLD TECH / DEMO v0.5.0</p></div></div>
+      <div class="brand"><span class="mark" aria-hidden="true">&lt;&lt;</span><div><h1>REWIND <span>RAMPAGE</span></h1><p>TAPE 004 / OLD TECH / DEMO v0.6.1</p></div></div>
       <button id="fullscreen" type="button">FULLSCREEN <span aria-hidden="true">↗</span></button>
     </header>
     <section class="player" aria-label="Play REWIND RAMPAGE">
@@ -41,7 +41,7 @@
     }
     canvas.addEventListener('pointerdown', () => canvas.focus());
     canvas.addEventListener('keydown', event => {
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
+      if (['Space', 'F3', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
     });
     fullscreen.addEventListener('click', () => {
       if (playerInstance) { playerInstance.SetFullscreen(1); canvas.focus(); }
@@ -60,7 +60,7 @@
           streamingAssetsUrl: 'StreamingAssets',
           companyName: 'Tape Lab',
           productName: 'REWIND RAMPAGE',
-          productVersion: '0.5.0',
+          productVersion: '0.6.1',
           showBanner: (message, type) => { if (type === 'error') showError(message); }
         }, progress => {
           document.querySelector('#progress-fill').style.width = `${Math.round(progress * 100)}%`;

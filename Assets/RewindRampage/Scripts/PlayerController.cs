@@ -74,6 +74,9 @@ namespace RewindRampage
             return true;
         }
 
+        // One authored event; combat immunity and debug god mode do not suppress it.
+        public void ApplyStoryDamage(int amount) { Health = Mathf.Max(0, Health - Mathf.Max(0, amount)); }
+
         public void UpdateVisual(float time, bool rewinding, float cooldownFraction, bool ready)
         {
             Color color = rewinding ? GameArt.Gold : GameArt.Cyan;

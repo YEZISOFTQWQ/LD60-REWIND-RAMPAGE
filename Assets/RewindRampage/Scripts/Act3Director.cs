@@ -13,6 +13,9 @@ namespace RewindRampage
         private readonly Action<Vector2, DamageSource> onEchoKilled;
         private readonly Action<int> onPhaseChanged;
         private readonly Action<bool> onFinished;
+        private float coreStun;
+        public bool HostileRewindDetected { get; private set; }
+        public IReadOnlyList<EchoAIController> Echoes => spawns.Echoes;
         public TimeCoreController Core { get; }
         public float Remaining { get; private set; } = Duration;
         public int Phase { get; private set; }
@@ -28,13 +31,18 @@ namespace RewindRampage
         {
             this.tuning = tuning; this.player = player; this.onEchoKilled = onEchoKilled;
             this.onPhaseChanged = onPhaseChanged; this.onFinished = onFinished;
-            spawns = new EchoSpawnDirector(tuning, art, player, feedback, onPlayerHit);
-            Core = new TimeCoreController(tuning, art, feedback.transform, onCoreHit);
+            spawns = new EchoSpawnDirector(tuning, art, player, feedback, onPlayerHit, () => HostileRewindDetected = true);
+            Core = new TimeCoreController(tuning, art, feedback.transform, destroyed =>
+            {
+                if (destroyed) coreStun = 0.5f;
+                onCoreHit(destroyed);
+            });
         }
 
         public void Start(IReadOnlyList<Vector2> entryPositions = null)
         {
             Remaining = Duration; Phase = EchoKills = 0;
+            HostileRewindDetected = false; coreStun = 0f;
             Core.Reset(); spawns.Start(entryPositions); IsRunning = true;
         }
 
@@ -50,12 +58,17 @@ namespace RewindRampage
                 onPhaseChanged(phase);
             }
             // Match the existing player rewind freeze, but never pause the archive countdown.
-            if (!playerRewound && player.Health > 0)
-                spawns.Tick(deltaTime, new EchoAttackFrame(playerClock - deltaTime, deltaTime, previousPosition, player.Position));
+            float stunSlice = Mathf.Min(coreStun, deltaTime); coreStun -= stunSlice;
+            if (!playerRewound && player.Health > 0 && deltaTime > stunSlice)
+            {
+                float activeDelta = deltaTime - stunSlice;
+                Vector2 activeStart = Vector2.Lerp(previousPosition, player.Position, stunSlice / deltaTime);
+                spawns.Tick(activeDelta, new EchoAttackFrame(playerClock - activeDelta, activeDelta, activeStart, player.Position));
+            }
             if (player.Health <= 0 || Remaining <= 0f)
             {
                 bool victory = player.Health > 0 && Core.IsDestroyed;
-                Stop(); onFinished(victory);
+                IsRunning = false; spawns.Halt(); onFinished(victory);
             }
         }
 
@@ -91,11 +104,12 @@ namespace RewindRampage
 
         public void TickVisual(float deltaTime)
         {
-            spawns.TickVisual(deltaTime);
+            spawns.TickVisual(IsRunning && coreStun <= 0f ? deltaTime : 0f);
             Core.TickVisual(deltaTime);
         }
         public void Stop() { IsRunning = false; spawns.Stop(); }
-        public void Reset() { Stop(); Core.Reset(); Remaining = Duration; Phase = EchoKills = 0; }
+        public void SetStoryPresentation(float opacity, float offset) { spawns.SetStoryPresentation(opacity, offset); }
+        public void Reset() { Stop(); Core.Reset(); Remaining = Duration; Phase = EchoKills = 0; coreStun = 0f; HostileRewindDetected = false; }
         public void Dispose() { spawns.Dispose(); }
     }
 }

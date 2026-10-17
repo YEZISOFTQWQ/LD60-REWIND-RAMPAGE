@@ -25,6 +25,7 @@ namespace RewindRampage
         private Mesh runtimeMesh;
         private Color32[] colors;
         private readonly int[] values = new int[7];
+        public float LampOpacity { get; set; } = 1f;
 
         public Mesh Author(GameArt art, Material material, Material redGlow, Material iceGlow, bool archive)
         {
@@ -158,9 +159,9 @@ namespace RewindRampage
                 if (lampLabels[i].fontSharedMaterial != labelMaterial) lampLabels[i].fontSharedMaterial = labelMaterial;
                 float lampBrightness = locked || i == 1 ? 1f : brightness;
                 Color color = lit ? i == 0 ? Red : Ice : new Color(0.07f, 0.16f, 0.18f);
-                color.a = visibility * (lit ? 0.68f * lampBrightness : 0.24f);
+                color.a = visibility * LampOpacity * (lit ? 0.68f * lampBrightness : 0.24f);
                 ColorQuad(lampQuads[i], color);
-                color.a = visibility * (lit ? 0.9f * lampBrightness : 0.3f);
+                color.a = visibility * LampOpacity * (lit ? 0.9f * lampBrightness : 0.3f);
                 lampLabels[i].color = color;
             }
             mesh.colors32 = colors;

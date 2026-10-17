@@ -27,10 +27,10 @@ namespace RewindRampage
         private Act3Director archive;
         private Act1StoryDirector story;
         private Act2StoryDirector act2Story;
+        private Act3StoryDirector act3Story;
         private GameTuning runtimeTuning;
         private Vector2 originalArenaHalfSize;
         private float arenaScale = 1f;
-        private readonly Vector2[] archiveEntryPositions = new Vector2[6];
         private int lastWidth;
         private int lastHeight;
         private Vector2 movementStart;
@@ -43,6 +43,7 @@ namespace RewindRampage
         public Act3Director Archive => archive;
         public GhostDuelManager Duel => duel;
         public Act2StoryDirector Act2Story => act2Story;
+        public Act3StoryDirector Act3Story => act3Story;
         public GameTuning Tuning => tuning;
         public PlayerController Player => player;
         public TrailRecorder Recorder => recorder;
@@ -112,6 +113,7 @@ namespace RewindRampage
             hud.Initialize(this);
             story = new Act1StoryDirector(tuning, art, player, hud, feedback, storyArena);
             act2Story = new Act2StoryDirector(tuning, art, player, duel, hud, storyArena, feedback.transform, SetArenaScale);
+            act3Story = new Act3StoryDirector(tuning, art, player, archive, hud, feedback, storyArena);
             hud.ShowState();
             if (initialAct == GameAct.Archive) StartArchive();
         }
@@ -133,6 +135,7 @@ namespace RewindRampage
             ghostNodes.Tick(effectDelta, intersections.Nodes);
             archive.TickVisual(effectDelta);
             act2Story.Present(State == SessionState.Playing ? Time.deltaTime : 0f);
+            act3Story.Present(State == SessionState.Playing ? Time.deltaTime : 0f);
             hud.Tick(Time.unscaledDeltaTime);
             story.Present(State == SessionState.Playing ? Time.deltaTime : 0f, Elapsed, State == SessionState.Playing);
         }
@@ -206,6 +209,22 @@ namespace RewindRampage
 
         private void TickArchive(float deltaTime)
         {
+            if (act3Story.IsOpening)
+            {
+                if (act3Story.TickOpening(deltaTime))
+                {
+                    archive.Start(); player.Protect(Elapsed, 1f); act3Story.BeginBattle();
+                }
+                return;
+            }
+            if (act3Story.IsEnding)
+            {
+                if (act3Story.TickEnding(deltaTime))
+                {
+                    act3Story.Stop(false); State = SessionState.Results; hud.ShowState();
+                }
+                return;
+            }
             deltaTime = Mathf.Min(deltaTime, archive.Remaining);
             float previousTime = Elapsed;
             Vector2 previousPosition = player.Position;
@@ -225,6 +244,7 @@ namespace RewindRampage
                 }
             }
             archive.Tick(deltaTime, Elapsed, previousPosition, wasRewinding || started);
+            act3Story.Observe(deltaTime);
             feedback.DrawHistory(recorder, rewind.IsRewinding);
             player.UpdateVisual(Elapsed, rewind.IsRewinding, rewind.CooldownFraction, rewind.IsReady);
         }
@@ -234,12 +254,12 @@ namespace RewindRampage
         private void StartArchive(bool fromStory)
         {
             Vector2 entryPosition = player.Position;
-            if (fromStory) act2Story.CopyArchivePositions(archiveEntryPositions);
+            act3Story.Stop();
             act2Story.Stop();
             story.Stop();
             duel.Reset(); runRecorder.ClearRecording(); archive.Reset();
             feedback.ResetFeedback(); rewind.Reset(); spawner.ResetEnemies();
-            player.ResetPlayer(tuning.archivePlayerHealth);
+            player.ResetPlayer(3);
             SetArenaScale(Act2StoryDirector.ArchiveScale);
             if (fromStory) player.SetPosition(entryPosition);
             Act = GameAct.Archive;
@@ -249,11 +269,10 @@ namespace RewindRampage
             Survived = false;
             intersections.IgnoreUnlockDelay = true;
             recorder.Clear(player.Position, Elapsed);
-            archive.Start(fromStory ? archiveEntryPositions : null);
+            act3Story.Begin();
             State = SessionState.Playing;
             feedback.SetPaused(false); feedback.PlayStart();
             hud.ShowState();
-            hud.ShowBurst("ACT III / THE ARCHIVE", "ERASE THE CORE AT 00:30. SURVIVE UNTIL 00:00.", GameArt.Gold, 2.2f);
         }
 
         private void OnArchivePhaseChanged(int phase)
@@ -266,13 +285,14 @@ namespace RewindRampage
         {
             feedback.ArchiveCoreImpact(Vector2.zero, destroyed);
             hud.ShowCoreImpact(destroyed);
+            if (destroyed) act3Story.CoreDestroyed();
         }
 
         private void OnArchiveFinished(bool victory)
         {
-            Survived = victory; State = SessionState.Results;
+            Survived = victory;
             rewind.Reset(); feedback.PlayEnd(victory);
-            SaveBestScore(); hud.ShowState();
+            SaveBestScore(); act3Story.BeginEnding(victory);
         }
 
         private Vector2 MovementInput()
@@ -422,6 +442,7 @@ namespace RewindRampage
 
         public void StartRun()
         {
+            act3Story.Stop();
             act2Story.Stop(); SetArenaScale(1f);
             archive.Reset();
             duel.Reset();
@@ -464,6 +485,7 @@ namespace RewindRampage
         public void RetryDuel()
         {
             if (duel.Recording == null) return;
+            act3Story.Stop();
             story.Stop();
             act2Story.Stop(); SetArenaScale(1f);
             Survived = false;

@@ -10,9 +10,7 @@ namespace RewindRampage
 
         private void Update()
         {
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (Input.GetKeyDown(KeyCode.F3)) LoadArchive();
-#endif
         }
     }
 }

@@ -26,34 +26,30 @@ namespace RewindRampage
         private readonly GameTuning tuning;
         private readonly FeedbackController feedback;
         private readonly Transform root;
-        private readonly SpriteRenderer body, ring, halo;
+        private readonly EchoVisual visual;
+        private readonly SpriteRenderer body;
         private readonly LineRenderer warning, warningZone, attackTrail;
         private readonly EchoRewindAttack attack;
         private readonly List<Vector2> lockedPath = new List<Vector2>(25);
         private readonly HashSet<int> damagingPlayerActions = new HashSet<int>();
-        private readonly Color baseColor;
+        private readonly Action onWarning;
         private EchoPhaseSettings phase, lockedAttack;
         private float stateRemaining, attackWait, visualTime, trailFade;
         private Vector2 wanderTarget;
         private int health;
+        private float storyOpacity = 1f, storyOffset;
         public EchoState State { get; private set; } = EchoState.Dead;
         public bool IsAlive => State != EchoState.Dead;
         public bool ReservesAttack => State == EchoState.Warning || State == EchoState.Rewind;
         public Vector2 Position => root.position;
 
         public EchoAIController(int index, GameTuning tuning, GameArt art, PlayerController player,
-            FeedbackController feedback, Transform parent, Material dashedMaterial, Action<Vector2> onPlayerHit)
+            FeedbackController feedback, Transform parent, Material dashedMaterial, Action<Vector2> onPlayerHit, Action warningStarted = null)
         {
             this.tuning = tuning; this.feedback = feedback;
-            Color[] colors = { new Color(1f, 0.2f, 0.6f, 0.8f), new Color(0.65f, 0.3f, 1f, 0.8f),
-                new Color(1f, 0.4f, 0.27f, 0.8f), new Color(0.87f, 0.4f, 1f, 0.8f) };
-            baseColor = colors[index % colors.Length];
-            root = new GameObject("Archive Echo " + (index + 1)).transform;
-            root.SetParent(parent, false);
-            body = ReplayVisuals.Sprite("Echo subject", root, art.triangle, 0.8f, 9, baseColor);
-            ring = ReplayVisuals.Sprite("Echo outline", root, art.ring, 1.3f, 7, baseColor);
-            halo = ReplayVisuals.Sprite("Echo glow", root, art.glow, 1.8f, 6, baseColor);
-            halo.sharedMaterial = art.glowMaterial;
+            onWarning = warningStarted;
+            visual = new EchoVisual("Archive Echo " + (index + 1), index, art, parent);
+            root = visual.Root; body = visual.Body;
             warning = ReplayVisuals.Line("Locked rewind warning", root, art, 0.1f, GameArt.Red, 5);
             warning.sharedMaterial = dashedMaterial; warning.textureMode = LineTextureMode.Tile;
             warningZone = ReplayVisuals.Line("Locked danger radius", root, art, tuning.attackRadius * 2f,
@@ -67,6 +63,7 @@ namespace RewindRampage
         {
             phase = settings; health = tuning.archiveEchoHealth;
             root.position = position; root.localScale = Vector3.one;
+            body.transform.localPosition = Vector3.zero; attackTrail.enabled = true; storyOpacity = 1f; storyOffset = 0f;
             State = EchoState.Spawn; stateRemaining = 0.55f;
             visualTime = trailFade = 0f;
             damagingPlayerActions.Clear(); lockedPath.Clear();
@@ -121,6 +118,7 @@ namespace RewindRampage
                     for (int i = 0; i < lockedPath.Count; i++) { warning.SetPosition(i, lockedPath[i]); warningZone.SetPosition(i, lockedPath[i]); }
                     warning.enabled = warningZone.enabled = true;
                     State = EchoState.Warning; stateRemaining = lockedAttack.Warning;
+                    onWarning?.Invoke();
                     feedback.PlayReplayWarning();
                 }
                 else if (State == EchoState.Warning && stateRemaining <= 0.000001f)
@@ -157,13 +155,8 @@ namespace RewindRampage
             if (!IsAlive) return;
             visualTime += deltaTime;
             root.localScale = Vector3.one * (State == EchoState.Spawn ? Mathf.Lerp(0.2f, 1f, 1f - stateRemaining / 0.55f) : 1f);
-            body.color = State == EchoState.Rewind ? GameArt.Red : baseColor;
-            Color color = baseColor; color.a = 0.24f;
-            halo.color = color;
-            color = State == EchoState.Warning || State == EchoState.Rewind ? GameArt.Red : baseColor;
-            color.a = State == EchoState.Warning ? 0.35f + 0.65f * Mathf.Abs(Mathf.Sin(visualTime * 20f)) : 0.65f;
-            ring.color = color;
-            warning.startColor = warning.endColor = new Color(1f, 0.24f, 0.4f, State == EchoState.Warning ? color.a : 0.2f);
+            visual.Present(State, visualTime, storyOpacity, storyOffset);
+            warning.startColor = warning.endColor = new Color(1f, 0.24f, 0.4f, State == EchoState.Warning ? visual.Ring.color.a : 0.2f);
             if (State == EchoState.Rewind) attackTrail.startColor = attackTrail.endColor = GameArt.Red;
             else if (trailFade > 0f)
             {
@@ -179,6 +172,20 @@ namespace RewindRampage
             if (--health > 0) return false;
             Despawn();
             return true;
+        }
+
+        public void Halt()
+        {
+            if (!IsAlive) return;
+            State = EchoState.Recovery; stateRemaining = 0.5f;
+            warning.enabled = warningZone.enabled = attackTrail.enabled = false;
+        }
+
+        public void SetStoryPresentation(float opacity, float offset)
+        {
+            if (!IsAlive) return;
+            storyOpacity = opacity; storyOffset = offset;
+            TickVisual(0f);
         }
 
         public void Despawn()

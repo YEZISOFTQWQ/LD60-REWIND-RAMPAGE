@@ -14,7 +14,7 @@ namespace RewindRampage
         private readonly SpriteRenderer body, ring, halo;
         private readonly SpriteRenderer[] integrity = new SpriteRenderer[3];
         private readonly HashSet<int> damagingActions = new HashSet<int>();
-        private float visualTime, breakFade;
+        private float visualTime, breakFade, birth;
         public TimeCoreState State { get; private set; }
         public int Health { get; private set; }
         public bool IsDestroyed => State == TimeCoreState.Destroyed;
@@ -28,16 +28,17 @@ namespace RewindRampage
             halo = ReplayVisuals.Sprite("Core glow", root, art.glow, 3.4f, 2, GameArt.Gold);
             halo.sharedMaterial = art.glowMaterial;
             ring = ReplayVisuals.Sprite("Core boundary", root, art.ring, tuning.archiveCoreRadius * 2.5f, 4, GameArt.Gold);
-            body = ReplayVisuals.Sprite("Core crystal", root, art.hexagon, 1.55f, 5, GameArt.White);
+            body = ReplayVisuals.Sprite("Core crystal", root, art.hexagon, 0.9f, 5, GameArt.Red);
             for (int i = 0; i < integrity.Length; i++)
-                integrity[i] = ReplayVisuals.Sprite("Integrity " + (i + 1), root, art.diamond, 0.18f, 6, GameArt.Gold);
+                integrity[i] = ReplayVisuals.Sprite("Integrity layer " + (i + 1), root, art.ring, 1.25f + i * 0.55f, 6, i == 1 ? GameArt.Red : GameArt.White);
             Reset();
         }
 
         public void Reset()
         {
             State = TimeCoreState.Dormant; Health = 3;
-            damagingActions.Clear(); visualTime = breakFade = 0f;
+            damagingActions.Clear(); visualTime = breakFade = birth = 0f;
+            root.localScale = Vector3.one;
             root.gameObject.SetActive(false);
         }
 
@@ -62,7 +63,9 @@ namespace RewindRampage
         public void TickVisual(float deltaTime)
         {
             if (State == TimeCoreState.Dormant) return;
-            visualTime += deltaTime;
+            if (State == TimeCoreState.Active) visualTime += deltaTime;
+            birth = Mathf.Min(1f, birth + deltaTime * 2f);
+            root.localScale = Vector3.one * Mathf.SmoothStep(0.08f, 1f, birth);
             body.transform.localRotation = Quaternion.Euler(0f, 0f, visualTime * 18f);
             Color color = GameArt.Gold;
             color.a = State == TimeCoreState.Destroyed ? breakFade * 1.4f : 0.85f;
@@ -70,8 +73,8 @@ namespace RewindRampage
             color.a *= 0.28f; halo.color = color;
             for (int i = 0; i < integrity.Length; i++)
             {
-                float angle = (visualTime * 25f + i * 120f) * Mathf.Deg2Rad;
-                integrity[i].transform.localPosition = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * 1.3f;
+                integrity[i].transform.localPosition = Vector3.zero;
+                integrity[i].transform.localRotation = Quaternion.Euler(0f, 0f, visualTime * (i % 2 == 0 ? 25f : -30f));
                 integrity[i].enabled = i < Health;
             }
             if (State == TimeCoreState.Destroyed)
