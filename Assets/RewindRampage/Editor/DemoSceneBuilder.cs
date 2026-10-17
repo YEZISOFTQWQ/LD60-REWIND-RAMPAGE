@@ -18,6 +18,192 @@ namespace RewindRampage.Editor
         private static GameArt art;
         private static GameTuning tuning;
 
+        [MenuItem("Rewind Rampage/Upgrade to v0.7.0 - Minimal HUD and Act II")]
+        public static void UpgradeToV070()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before upgrading the HUD.");
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            art = AssetDatabase.LoadAssetAtPath<GameArt>(Root + "/Art/DemoArt.asset");
+            tuning = AssetDatabase.LoadAssetAtPath<GameTuning>(Root + "/Settings/DemoTuning.asset");
+            tuning.ghostBossHealth = 1; EditorUtility.SetDirty(tuning);
+            string[] paths = { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/Act3.unity" };
+            foreach (string path in paths)
+            {
+                Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                RewindHud hud = null; Transform arena = null;
+                foreach (GameObject root in scene.GetRootGameObjects())
+                {
+                    if (hud == null) hud = root.GetComponentInChildren<RewindHud>(true);
+                    if (root.name == "Arena - dark signal grid") arena = root.transform;
+                }
+                if (hud == null || arena == null) throw new InvalidOperationException("The existing HUD or arena is missing: " + path);
+                EnsureTapeTransport(hud);
+                EnsurePhosphorClock(hud, arena, path == paths[1]);
+                EnsureMinimalHud(hud, arena);
+                EditorSceneManager.SaveScene(scene, path);
+            }
+            PlayerSettings.bundleVersion = "0.7.0";
+            AssetDatabase.SaveAssets();
+            EditorSceneManager.OpenScene(paths[0], OpenSceneMode.Single);
+            Debug.Log("v0.7.0 compact tape transport and blue hearts authored in both scenes. No gameplay tests were run.");
+        }
+
+        private static void EnsureTapeTransport(RewindHud hud)
+        {
+            SerializedObject data = new SerializedObject(hud);
+            SerializedProperty view = data.FindProperty("view");
+            RectTransform tape = (RectTransform)hud.transform.Find("Tape deck");
+            if (tape == null) throw new InvalidOperationException("The existing tape deck is missing.");
+            Horizontal(tape, 12f, 220f, 40f, 40f);
+            tape.localScale = Vector3.one;
+            string[] oldParts = { "Tape background", "Tape top trim", "Tape format", "Tape track" };
+            foreach (string name in oldParts)
+            {
+                Transform old = tape.Find(name);
+                if (old != null) old.gameObject.SetActive(false);
+            }
+            SerializedProperty reels = view.FindPropertyRelative("reels");
+            for (int i = 0; i < reels.arraySize; i++)
+                ((RectTransform)reels.GetArrayElementAtIndex(i).objectReferenceValue).gameObject.SetActive(false);
+            Transform readouts = hud.transform.Find("Transport readouts");
+            if (readouts == null) readouts = Rect("Transport readouts", hud.transform, Vector2.zero, Vector2.zero, Vector2.zero);
+            Stretch((RectTransform)readouts); readouts.SetSiblingIndex(tape.GetSiblingIndex() + 1);
+            CanvasGroup readoutFade = readouts.GetComponent<CanvasGroup>();
+            if (readoutFade == null) readoutFade = readouts.gameObject.AddComponent<CanvasGroup>();
+            SerializedProperty fades = view.FindPropertyRelative("bootFades");
+            bool hasFade = false;
+            for (int i = 0; i < fades.arraySize; i++) if (fades.GetArrayElementAtIndex(i).objectReferenceValue == readoutFade) hasFade = true;
+            if (!hasFade) { int index = fades.arraySize++; fades.GetArrayElementAtIndex(index).objectReferenceValue = readoutFade; }
+            TextMeshProUGUI Readout(string field, Vector2 point, float fontSize)
+            {
+                TextMeshProUGUI label = (TextMeshProUGUI)view.FindPropertyRelative(field).objectReferenceValue;
+                label.transform.SetParent(readouts, false);
+                Place(label.rectTransform, new Vector2(0.5f, 0f), point, new Vector2(240f, 22f));
+                label.rectTransform.pivot = new Vector2(0f, 0.5f); label.transform.localScale = Vector3.one;
+                label.fontSize = fontSize; label.alignment = TextAlignmentOptions.Midline;
+                return label;
+            }
+            Readout("abilityLabel", new Vector2(-120f, 54f), 16f);
+            Readout("tapeTime", new Vector2(-120f, 15f), 13f);
+            SerializedProperty samples = view.FindPropertyRelative("tapeSegments");
+            RectTransform track = (RectTransform)((UnityEngine.UI.Image)samples.GetArrayElementAtIndex(0).objectReferenceValue).transform.parent;
+            track.SetParent(readouts, false); track.gameObject.SetActive(true);
+            Place(track, new Vector2(0.5f, 0f), new Vector2(-120f, 34f), new Vector2(240f, 3f));
+            track.pivot = new Vector2(0f, 0.5f);
+            ((RectTransform)view.FindPropertyRelative("tapeFlowMarker").objectReferenceValue).gameObject.SetActive(false);
+            Transform existing = tape.Find("Transport mechanism");
+            RectTransform graphics = existing != null ? (RectTransform)existing : Rect("Transport mechanism", tape, Vector2.zero, Vector2.zero, Vector2.zero);
+            Stretch(graphics); graphics.SetAsFirstSibling();
+            if (graphics.GetComponent<CanvasRenderer>() == null) graphics.gameObject.AddComponent<CanvasRenderer>();
+            TapeTransportHud transport = graphics.GetComponent<TapeTransportHud>();
+            if (transport == null) transport = graphics.gameObject.AddComponent<TapeTransportHud>();
+            transport.raycastTarget = false;
+            TextMeshProUGUI Caption(string name, Transform parent, Vector2 anchor, Vector2 point, Vector2 size, string value, float fontSize, TextAlignmentOptions alignment)
+            {
+                TextMeshProUGUI text = EnsureLabel(name, parent, anchor, point, size, value, fontSize, GameArt.Muted);
+                Place(text.rectTransform, anchor, point, size); text.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+                text.transform.localScale = Vector3.one; text.fontSize = fontSize; text.alignment = alignment;
+                text.color = GameArt.Muted; text.text = value;
+                return text;
+            }
+            foreach (string name in new[] { "Magnetic tape unit", "Buffer label" })
+            {
+                Transform oldCaption = tape.Find(name);
+                if (oldCaption != null) oldCaption.SetParent(readouts, false);
+            }
+            Caption("Magnetic tape unit", readouts, new Vector2(1f, 0f), new Vector2(-190f, 145f), new Vector2(300f, 18f), "MAGNETIC TAPE UNIT / VHS-3", 11f, TextAlignmentOptions.MidlineRight);
+            Caption("Buffer label", readouts, new Vector2(1f, 0f), new Vector2(-190f, 66f), new Vector2(300f, 12f), "LIVE BUFFER / 3 SEC", 10f, TextAlignmentOptions.MidlineRight);
+            Transform labelRoot = tape.Find("Mechanism captions");
+            if (labelRoot == null) labelRoot = Rect("Mechanism captions", tape, Vector2.zero, Vector2.zero, Vector2.zero);
+            RectTransform labelRect = (RectTransform)labelRoot;
+            Place(labelRect, Vector2.zero, Vector2.zero, new Vector2(440f, 220f));
+            TextMeshProUGUI title = Caption("Tape transport title", labelRoot, new Vector2(0.5f, 0f), new Vector2(0f, 184f), new Vector2(400f, 25f), "TAPE TRANSPORT", 20f, TextAlignmentOptions.Midline);
+            title.characterSpacing = 6f; title.color = new Color(0.66f, 0.85f, 0.89f);
+            Caption("Supply label", labelRoot, new Vector2(110f / 440f, 0f), new Vector2(0f, 28f), new Vector2(100f, 18f), "SUPPLY", 14f, TextAlignmentOptions.Midline);
+            Caption("Head label", labelRoot, new Vector2(0.5f, 0f), new Vector2(0f, 28f), new Vector2(100f, 18f), "HEAD", 14f, TextAlignmentOptions.Midline);
+            Caption("Take-up label", labelRoot, new Vector2(326f / 440f, 0f), new Vector2(0f, 28f), new Vector2(100f, 18f), "TAKE-UP", 14f, TextAlignmentOptions.Midline);
+            Caption("Transport state title", tape, new Vector2(1f, 0f), new Vector2(-80f, 164f), new Vector2(150f, 14f), "TRANSPORT STATE", 9f, TextAlignmentOptions.Midline);
+            string[] names = { "REC", "> PLAY", "<< REW", "II PAUSE" };
+            TextMeshProUGUI[] lamps = new TextMeshProUGUI[4];
+            for (int i = 0; i < lamps.Length; i++)
+                lamps[i] = Caption("Transport lamp " + i, tape, new Vector2(0.5f, 0f), new Vector2(-52f + (i % 2) * 126f, 136f - (i / 2) * 55f), new Vector2(76f, 42f), names[i].Replace("> ", "").Replace("<< ", "").Replace("II ", ""), 18f, TextAlignmentOptions.MidlineLeft);
+            Sprite heart = Shape("HealthHeart", 6);
+            SerializedProperty health = view.FindPropertyRelative("health");
+            for (int i = 0; i < health.arraySize; i++)
+            {
+                UnityEngine.UI.Image icon = (UnityEngine.UI.Image)health.GetArrayElementAtIndex(i).objectReferenceValue;
+                Place(icon.rectTransform, new Vector2(5f / 6f, 0f), new Vector2(-66f + i * 48f, 102f), Vector2.one * 36f);
+                icon.rectTransform.pivot = Vector2.zero;
+                icon.sprite = heart; icon.color = GameArt.Cyan; icon.preserveAspect = true;
+                UnityEngine.UI.Outline glow = icon.GetComponent<UnityEngine.UI.Outline>();
+                if (glow == null) glow = icon.gameObject.AddComponent<UnityEngine.UI.Outline>();
+                glow.effectColor = new Color(0.23f, 0.96f, 0.91f, 0.16f); glow.effectDistance = new Vector2(1.3f, -1.3f);
+            }
+            TextMeshProUGUI healthLabel = hud.transform.Find("Signal label").GetComponent<TextMeshProUGUI>();
+            Place(healthLabel.rectTransform, Vector2.zero, new Vector2(64f, 132f), new Vector2(230f, 20f));
+            healthLabel.text = "INTEGRITY"; healthLabel.fontSize = 13f;
+            // Keep the existing footer controls beneath the mechanism and its captions.
+            Place(hud.transform.Find("Controls").GetComponent<RectTransform>(), new Vector2(0.5f, 0f), new Vector2(0f, 4f), new Vector2(750f, 24f));
+            UnityEngine.UI.Button god = (UnityEngine.UI.Button)view.FindPropertyRelative("godMode").objectReferenceValue;
+            Place(god.GetComponent<RectTransform>(), Vector2.zero, new Vector2(36f, 3f), new Vector2(230f, 24f));
+            UnityEngine.UI.Button mute = (UnityEngine.UI.Button)view.FindPropertyRelative("mute").objectReferenceValue;
+            Place(mute.GetComponent<RectTransform>(), new Vector2(1f, 0f), new Vector2(-36f, 3f), new Vector2(170f, 24f));
+            transport.Configure(lamps);
+            transport.DisplayLamps(ClockLamps.Rec | ClockLamps.Play, false, 1f, 1f);
+            view.FindPropertyRelative("tapeTransport").objectReferenceValue = transport;
+            data.ApplyModifiedPropertiesWithoutUndo(); EditorUtility.SetDirty(transport); EditorUtility.SetDirty(hud);
+        }
+
+        private static void EnsureMinimalHud(RewindHud hud, Transform arena)
+        {
+            SerializedObject data = new SerializedObject(hud);
+            SerializedProperty view = data.FindProperty("view");
+            foreach (bool top in new[] { false, true })
+            {
+                string name = top ? "Minimal header background" : "Minimal transport background";
+                Transform existing = hud.transform.Find(name);
+                UnityEngine.UI.Image backing = existing != null ? existing.GetComponent<UnityEngine.UI.Image>()
+                    : Box(name, hud.transform, Vector2.zero, Vector2.zero, Vector2.zero, Color.white);
+                RectTransform rect = backing.rectTransform;
+                rect.anchorMin = new Vector2(0f, top ? 0.92f : 0f); rect.anchorMax = new Vector2(1f, top ? 1f : 0.24f);
+                rect.offsetMin = rect.offsetMax = Vector2.zero;
+                backing.color = new Color(0.016f, 0.026f, 0.032f); backing.raycastTarget = false;
+                rect.SetAsFirstSibling();
+            }
+            foreach (string field in new[] { "recordState", "recordDot", "phase", "enemyCount", "nodeStatus", "instructions", "notice", "chainLabel", "storyCapture", "storyBackdrop", "godMode", "mute" })
+                ((Component)view.FindPropertyRelative(field).objectReferenceValue).gameObject.SetActive(false);
+            foreach (string name in new[] { "Tape Lab", "Signal label", "Score label", "Time label", "Controls", "Pause hint" })
+            {
+                Transform old = hud.transform.Find(name); if (old != null) old.gameObject.SetActive(false);
+            }
+            foreach (string name in new[] { "Magnetic tape unit", "Buffer label" })
+            {
+                Transform old = hud.transform.Find("Transport readouts/" + name); if (old != null) old.gameObject.SetActive(false);
+            }
+            hud.transform.Find("Tape deck/Transport state title").gameObject.SetActive(false);
+            TextMeshProUGUI title = hud.transform.Find("Game name").GetComponent<TextMeshProUGUI>();
+            Place(title.rectTransform, new Vector2(0f, 1f), new Vector2(40f, -24f), new Vector2(600f, 42f)); title.fontSize = 30f;
+            TextMeshProUGUI score = (TextMeshProUGUI)view.FindPropertyRelative("score").objectReferenceValue;
+            Place(score.rectTransform, Vector2.one, new Vector2(-40f, -24f), new Vector2(320f, 42f)); score.fontSize = 28f;
+            score.text = "SCORE  000000";
+            foreach (LineRenderer line in arena.GetComponentsInChildren<LineRenderer>(true))
+                if (line.name.StartsWith("Grid X ") || line.name.StartsWith("Grid Y ")) UnityEngine.Object.DestroyImmediate(line.gameObject);
+            TextMeshProUGUI terminal = (TextMeshProUGUI)view.FindPropertyRelative("storyMessage").objectReferenceValue;
+            terminal.fontSize = 17f; terminal.lineSpacing = 3f; terminal.characterSpacing = 0.5f;
+            terminal.enableWordWrapping = true; terminal.alignment = TextAlignmentOptions.BottomLeft;
+            terminal.color = GameArt.Cyan;
+            Camera camera = Camera.main;
+            GameManager.LayoutArenaCamera(camera, tuning, 1600, 1000);
+            hud.LayoutTerminal(camera, tuning.arenaHalfSize, 1600, 1000);
+            foreach (string field in new[] { "bannerTitle", "bannerDetail", "duelTitle", "duelDetail", "duelTapeTime" })
+            {
+                TextMeshProUGUI text = (TextMeshProUGUI)view.FindPropertyRelative(field).objectReferenceValue;
+                text.rectTransform.anchorMin = text.rectTransform.anchorMax = new Vector2(0.5f, 0.58f);
+            }
+            ((UnityEngine.UI.RawImage)view.FindPropertyRelative("scanlines").objectReferenceValue).color = new Color(1f, 1f, 1f, 0.14f);
+            data.ApplyModifiedPropertiesWithoutUndo(); EditorUtility.SetDirty(hud); EditorUtility.SetDirty(camera);
+        }
+
         [MenuItem("Rewind Rampage/Upgrade to v0.6.1 - Act III finale")]
         public static void UpgradeToV061()
         {
@@ -92,9 +278,7 @@ namespace RewindRampage.Editor
             ((RectTransform)item.transform).sizeDelta = new Vector2(26f, 5f);
             ArenaClockHud clock = item.GetComponent<ArenaClockHud>();
             Material material = ClockTubeMaterial();
-            Material redGlow = ClockLabelGlow("ClockLabel-Record", new Color(1f, 0.17f, 0.13f));
-            Material iceGlow = ClockLabelGlow("ClockLabel-Transport", new Color(0.54f, 0.91f, 1f));
-            Mesh mesh = clock.Author(art, material, redGlow, iceGlow, archive);
+            Mesh mesh = clock.Author(art, material, archive);
             string meshPath = Root + "/Art/ClockSegments-" + (archive ? "Archive" : "Record") + ".asset";
             Mesh saved = AssetDatabase.LoadAssetAtPath<Mesh>(meshPath);
             if (saved == null) { AssetDatabase.CreateAsset(mesh, meshPath); saved = mesh; }
@@ -845,6 +1029,11 @@ namespace RewindRampage.Editor
                         case 2: distance = Mathf.Min(p.y + 0.36f, 0.46f - p.y - Mathf.Abs(p.x) * 1.95f); break;
                         case 3: distance = 0.46f - Mathf.Abs(p.x) - Mathf.Abs(p.y); break;
                         case 5: distance = Mathf.Min(0.4f - Mathf.Abs(p.y), 0.4f - 0.8660254f * Mathf.Abs(p.x) - 0.5f * Mathf.Abs(p.y)); break;
+                        case 6:
+                            Vector2 heart = p * 2.6f + Vector2.up * 0.12f;
+                            float curve = heart.sqrMagnitude - 1f;
+                            distance = -(curve * curve * curve - heart.x * heart.x * heart.y * heart.y * heart.y) * 0.16f;
+                            break;
                         default: distance = 0.46f - p.magnitude; break;
                     }
                     float alpha = shape == 4 ? Mathf.Pow(Mathf.Clamp01(1f - p.magnitude * 2f), 2.4f)

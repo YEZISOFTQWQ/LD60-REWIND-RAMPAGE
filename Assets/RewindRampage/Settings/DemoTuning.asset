@@ -46,7 +46,7 @@ MonoBehaviour:
   volatileExplosionRadius: 1.75
   volatileExplosionDamage: 1
   replaySampleInterval: 0.02
-  ghostBossHealth: 2
+  ghostBossHealth: 1
   ghostBossRadius: 0.85
   ghostBossInvulnerability: 0.7
   replayWarningLead: 0.5

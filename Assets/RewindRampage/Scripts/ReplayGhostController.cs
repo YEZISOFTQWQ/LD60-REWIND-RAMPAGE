@@ -39,7 +39,7 @@ namespace RewindRampage
     {
         private readonly Transform root;
         private readonly SpriteRenderer body, halo, ring;
-        private readonly LineRenderer history, future;
+        private readonly LineRenderer history;
         private readonly SpriteRenderer doubleOutline;
         private RunRecording recording;
         private int frameCursor;
@@ -63,7 +63,6 @@ namespace RewindRampage
             ring = ReplayVisuals.Sprite("Subject outline", root, art.ring, 1.45f, 8, ReplayVisuals.Magenta);
             doubleOutline = ReplayVisuals.Sprite("Playback tracking double", root, art.triangle, 0.8f, 8, ReplayVisuals.Magenta);
             history = ReplayVisuals.Line("Past recording", root, art, 0.045f, new Color(0.5f, 0.12f, 0.45f, 0.4f), -1);
-            future = ReplayVisuals.Line("Next second - movement preview", root, art, 0.035f, new Color(1f, 0.4f, 0.75f, 0.35f), 1);
             StopPlayback();
         }
 
@@ -81,7 +80,7 @@ namespace RewindRampage
         {
             clipStart = start; clipEnd = end;
             frameCursor = recording.FindFrame(start);
-            history.positionCount = future.positionCount = 0;
+            history.positionCount = 0;
             SetReplayTime(start);
         }
 
@@ -102,17 +101,12 @@ namespace RewindRampage
             history.positionCount = frameCursor - first + 2;
             for (int i = first; i <= frameCursor; i++) history.SetPosition(i - first, recording.Frames[i].Position);
             history.SetPosition(history.positionCount - 1, Position);
-            int last = recording.FindFrame(Mathf.Min(clipEnd, time + 1f));
-            future.positionCount = Mathf.Max(1, last - frameCursor + 1);
-            future.SetPosition(0, Position);
-            for (int i = frameCursor + 1; i <= last; i++) future.SetPosition(i - frameCursor, recording.Frames[i].Position);
         }
 
         public void ShowTapeFlashback(float progress, float destinationTime)
         {
             clipStart = destinationTime; clipEnd = recording.Duration;
             SetReplayTime(Mathf.Lerp(recording.Duration, destinationTime, progress));
-            future.positionCount = 0;
         }
 
         public void TickVisual(float deltaTime)
@@ -136,7 +130,6 @@ namespace RewindRampage
             color = ring.color; color.a *= presentationOpacity; ring.color = color;
             ring.transform.localScale = Vector3.one * (targetLocked ? 1.8f : 1.45f) * (1f + targetPulse * 0.2f);
             history.startColor = history.endColor = new Color(0.5f, 0.12f, 0.45f, 0.4f * presentationOpacity);
-            future.startColor = future.endColor = new Color(1f, 0.4f, 0.75f, 0.35f * presentationOpacity);
         }
 
         public void SetPresentationOpacity(float opacity, bool locked = false)

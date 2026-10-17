@@ -50,7 +50,7 @@ namespace RewindRampage
 
         [Header("Act II / Playback")]
         [Min(0.005f)] public float replaySampleInterval = 0.02f;
-        [Min(1)] public int ghostBossHealth = 2;
+        [Min(1)] public int ghostBossHealth = 1;
         [Min(0.1f)] public float ghostBossRadius = 0.85f;
         [Min(0f)] public float ghostBossInvulnerability = 0.7f;
         [Min(0.1f)] public float replayWarningLead = 0.5f;

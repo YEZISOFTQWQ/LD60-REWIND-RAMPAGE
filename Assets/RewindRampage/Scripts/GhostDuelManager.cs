@@ -15,6 +15,7 @@ namespace RewindRampage
         private readonly Action<bool> onFinished;
         private readonly ReplayGhostController ghost;
         private readonly ReplayAttackController attacks;
+        private readonly Act2FutureTrail futureTrail;
         private float transitionRemaining;
         private bool reconstructionPrepared, reverseStarted, duplicateRevealed;
         public GhostBossHealth Boss { get; }
@@ -40,6 +41,7 @@ namespace RewindRampage
             ghost = new ReplayGhostController(art, feedback.transform);
             attacks = new ReplayAttackController(tuning, art, player, feedback, onPlayerHit);
             Barrage = new Act2Barrage(tuning, art, player, feedback, chooseEdge);
+            futureTrail = new Act2FutureTrail(tuning, art, feedback.transform);
             Boss = new GhostBossHealth(tuning, () => ghost.Position, () =>
             {
                 ghost.FlashHit();
@@ -52,7 +54,7 @@ namespace RewindRampage
         {
             if (recording == null || recording.Frames.Count < 2) throw new InvalidOperationException("A completed recording is required for the duel.");
             Recording = recording;
-            Barrage.Clear();
+            Barrage.Clear(); futureTrail.Clear();
             Boss.Stop(); attacks.StopAllAttacks();
             DuelTime = 0f;
             ReplayTime = ReplayStart = Mathf.Max(0f, recording.Duration - Duration);
@@ -75,7 +77,7 @@ namespace RewindRampage
             Boss.ResetHealth();
             ghost.Initialize(Recording, ReplayStart, Recording.Duration);
             ghost.SetPresentationOpacity(1f, true);
-            attacks.Initialize(Recording, ReplayStart, Recording.Duration);
+            attacks.Initialize(Recording, ReplayStart, Recording.Duration, false);
             if (!reconstruction)
             {
                 State = GhostDuelState.Preparing;
@@ -109,6 +111,7 @@ namespace RewindRampage
             ghost.SetPresentationOpacity(1f, true);
             Barrage.Start(Recording, ReplayStart); Barrage.SetReady(1f);
             State = GhostDuelState.Fighting;
+            futureTrail.Show(Recording, ReplayStart, Recording.Duration);
         }
 
         public void SetPlayerClock(float time) { Boss.SetClock(time); }
@@ -117,6 +120,7 @@ namespace RewindRampage
         {
             ghost.IsFrozen = value;
             ghost.TickVisual(visualDelta);
+            if (value && State == GhostDuelState.Fighting) futureTrail.Show(Recording, ReplayTime, Recording.Duration);
         }
 
         public void Advance(float deltaTime, float playerClock, Vector2 previousPlayerPosition)
@@ -127,6 +131,7 @@ namespace RewindRampage
             // Replay the final 30 seconds continuously at the original recording speed.
             ReplayTime = Mathf.Min(Recording.Duration, ReplayStart + DuelTime);
             ghost.SetReplayTime(ReplayTime);
+            futureTrail.Show(Recording, ReplayTime, Recording.Duration);
             attacks.TickVisual(advance);
             attacks.ProcessEvents(ReplayTime, playerClock, previousPlayerPosition, advance);
             attacks.ShowUpcomingWarnings(ReplayTime);
@@ -147,9 +152,10 @@ namespace RewindRampage
 
         private void Finish(bool won)
         {
+            if (State != GhostDuelState.Fighting) return;
             State = won ? GhostDuelState.Victory : GhostDuelState.Defeat;
             Boss.Stop(); attacks.StopAllAttacks();
-            Barrage.Freeze();
+            Barrage.Freeze(); futureTrail.Clear();
             ghost.StopPlayback();
             onFinished(won);
         }
@@ -159,10 +165,10 @@ namespace RewindRampage
             State = GhostDuelState.Inactive;
             Recording = null;
             Boss.Stop(); attacks.ClearRecording(); ghost.ClearRecording();
-            Barrage.Clear();
+            Barrage.Clear(); futureTrail.Clear();
             DuelTime = ReplayTime = ReplayStart = 0f;
         }
 
-        public void Dispose() { attacks.Dispose(); }
+        public void Dispose() { attacks.Dispose(); futureTrail.Dispose(); }
     }
 }

@@ -278,7 +278,7 @@ namespace RewindRampage
         private void OnArchivePhaseChanged(int phase)
         {
             hud.ShowBurst(phase == 1 ? "PHASE II / THE HUNT" : "TIME CORE ONLINE",
-                phase == 1 ? "MORE ECHOES. MORE CROSSING PATHS." : "THREE HITS TO BREAK THE CORE. THE CLOCK KEEPS RUNNING.", GameArt.Gold, 2f);
+                phase == 1 ? "MORE ECHOES. MORE CROSSING PATHS." : "THREE HITS TO BREAK THE CORE. THE CLOCK KEEPS RUNNING.", GameArt.Gold, 2f, true);
         }
 
         private void OnArchiveCoreHit(bool destroyed)
@@ -522,7 +522,11 @@ namespace RewindRampage
         }
 
         public void ToggleMute() { feedback.ToggleMute(); }
-        public void ToggleInvincibility() { player.ToggleInvincibility(); }
+        public void ToggleInvincibility()
+        {
+            player.ToggleInvincibility();
+            hud.ShowNotice(player.Invincible ? "DEBUG: GOD MODE ENABLED." : "DEBUG: GOD MODE DISABLED.");
+        }
 
         private void EndRun(bool survived)
         {
@@ -559,8 +563,16 @@ namespace RewindRampage
         {
             lastWidth = Screen.width;
             lastHeight = Screen.height;
-            float aspect = Mathf.Max(0.2f, (float)lastWidth / Mathf.Max(1, lastHeight));
-            arenaCamera.orthographicSize = Mathf.Max(tuning.arenaHalfSize.y + 3f, (tuning.arenaHalfSize.x + 1.3f) / aspect);
+            LayoutArenaCamera(arenaCamera, tuning, lastWidth, lastHeight);
+            hud.LayoutTerminal(arenaCamera, tuning.arenaHalfSize, lastWidth, lastHeight);
+        }
+
+        public static void LayoutArenaCamera(Camera camera, GameTuning settings, int width, int height)
+        {
+            camera.rect = new Rect(0f, 0.24f, 1f, 0.68f);
+            float aspect = Mathf.Max(0.2f, width / (Mathf.Max(1f, height) * camera.rect.height));
+            camera.aspect = aspect;
+            camera.orthographicSize = Mathf.Max(settings.arenaHalfSize.y + 0.5f, (settings.arenaHalfSize.x + 0.7f) / aspect);
         }
 
         private void OnApplicationFocus(bool focused)

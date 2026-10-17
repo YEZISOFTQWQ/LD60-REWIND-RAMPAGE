@@ -6,6 +6,7 @@ namespace RewindRampage
 {
     public sealed class GhostBossHealth
     {
+        public const float HitRadiusMultiplier = 1.3f;
         private readonly GameTuning tuning;
         private readonly Func<Vector2> getPosition;
         private readonly Action onHit;
@@ -41,13 +42,13 @@ namespace RewindRampage
 
         public void HitSegment(Vector2 from, Vector2 to, float attackRadius, int actionId)
         {
-            float radius = tuning.ghostBossRadius + attackRadius;
+            float radius = (tuning.ghostBossRadius + attackRadius) * HitRadiusMultiplier;
             if (TrailDamageSystem.DistanceSquaredToSegment(Position, from, to) <= radius * radius) TakeDamage(actionId);
         }
 
         public void HitArea(Vector2 center, float radius, int actionId)
         {
-            float distance = radius + tuning.ghostBossRadius;
+            float distance = (radius + tuning.ghostBossRadius) * HitRadiusMultiplier;
             if ((center - Position).sqrMagnitude <= distance * distance) TakeDamage(actionId);
         }
     }

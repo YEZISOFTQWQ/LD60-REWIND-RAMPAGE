@@ -18,18 +18,14 @@ namespace RewindRampage
         [SerializeField] private int[] segmentQuads;
         [SerializeField] private int[] colonQuads;
         [SerializeField] private int decimalQuad;
-        [SerializeField] private int[] lampQuads;
         [SerializeField] private TextMeshPro[] units;
-        [SerializeField] private TextMeshPro[] lampLabels;
-        [SerializeField] private Material redLampGlow, iceLampGlow, dormantLamp;
+        [SerializeField] private Vector3[] unitOrigins;
+        [SerializeField] private float normalCenter, expandedCenter;
         private Mesh runtimeMesh;
         private Color32[] colors;
         private readonly int[] values = new int[7];
-        public float LampOpacity { get; set; } = 1f;
-
-        public Mesh Author(GameArt art, Material material, Material redGlow, Material iceGlow, bool archive)
+        public Mesh Author(GameArt art, Material material, bool archive)
         {
-            redLampGlow = redGlow; iceLampGlow = iceGlow; dormantLamp = art.font.material;
             Transform existing = transform.Find("Phosphor segments");
             GameObject meshObject = existing != null ? existing.gameObject : new GameObject("Phosphor segments", typeof(MeshFilter), typeof(MeshRenderer));
             meshObject.transform.SetParent(transform, false);
@@ -78,24 +74,37 @@ namespace RewindRampage
             }
             colonQuads = new[] { Quad(new Vector2(-7.05f, 0.65f), Vector2.one * 0.085f, 2), Quad(new Vector2(-7.05f, -0.65f), Vector2.one * 0.085f, 2) };
             decimalQuad = Quad(new Vector2(-0.48f, -1.84f), Vector2.one * 0.065f, 2);
-            lampQuads = new int[4];
-            for (int i = 0; i < 4; i++) lampQuads[i] = Quad(new Vector2(7.45f, 1.65f - i * 1.12f), new Vector2(2.75f, 0.43f), 1);
             Mesh mesh = new Mesh { name = "VHS seven-segment clock" };
             mesh.SetVertices(vertices); mesh.SetUVs(0, uv); mesh.SetUVs(1, shapes); mesh.SetTriangles(triangles, 0); mesh.RecalculateBounds();
             colors = new Color32[vertices.Count]; geometry.sharedMesh = mesh;
             units = new[] { Label("Minute unit", art, "M", new Vector2(-7.75f, -1.68f), 6f),
                 Label("Second unit", art, "S", new Vector2(-1.13f, -1.68f), 6f),
                 Label("Millisecond unit", art, "MS", new Vector2(1.55f, 0.25f), 3.5f) };
-            lampLabels = new TextMeshPro[4];
-            string[] titles = { "REC", "> PLAY", "<< REW", "II PAUSE" };
+            unitOrigins = new Vector3[units.Length];
+            float normalMin = float.PositiveInfinity, normalMax = float.NegativeInfinity;
+            float expandedMin = float.PositiveInfinity, expandedMax = float.NegativeInfinity;
+            for (int i = 0; i < vertices.Count; i++)
+            {
+                expandedMin = Mathf.Min(expandedMin, vertices[i].x); expandedMax = Mathf.Max(expandedMax, vertices[i].x);
+                if (i < 4 * 7 * 4) { normalMin = Mathf.Min(normalMin, vertices[i].x); normalMax = Mathf.Max(normalMax, vertices[i].x); }
+            }
+            for (int i = 0; i < units.Length; i++)
+            {
+                unitOrigins[i] = units[i].transform.localPosition;
+                units[i].ForceMeshUpdate();
+                float low = unitOrigins[i].x + units[i].textBounds.min.x, high = unitOrigins[i].x + units[i].textBounds.max.x;
+                expandedMin = Mathf.Min(expandedMin, low); expandedMax = Mathf.Max(expandedMax, high);
+                if (i < 2) { normalMin = Mathf.Min(normalMin, low); normalMax = Mathf.Max(normalMax, high); }
+            }
+            normalCenter = (normalMin + normalMax) * 0.5f;
+            expandedCenter = (expandedMin + expandedMax) * 0.5f;
+            // Keep the authored digit positions; transport indicators now belong to the bottom deck.
             for (int i = 0; i < 4; i++)
             {
-                TextMeshPro text = Label("Lamp " + i, art, titles[i], new Vector2(7.45f, 1.65f - i * 1.12f), 9.2f);
-                text.transform.localScale = Vector3.one;
-                lampLabels[i] = text;
+                Transform oldLamp = transform.Find("Lamp " + i);
+                if (oldLamp != null) oldLamp.gameObject.SetActive(false);
             }
-            Paint(mesh, archive ? 90f : 0f, archive ? 1f : 0f, archive ? 1f : 0f,
-                archive ? ClockLamps.Play : ClockLamps.Rec | ClockLamps.Play, false, 1f, 1f);
+            Paint(mesh, archive ? 90f : 0f, archive ? 1f : 0f, archive ? 1f : 0f, 1f, 1f);
             return mesh;
         }
 
@@ -104,6 +113,7 @@ namespace RewindRampage
             Transform existing = transform.Find(name);
             TextMeshPro text = existing != null ? existing.GetComponent<TextMeshPro>() : new GameObject(name).AddComponent<TextMeshPro>();
             text.transform.SetParent(transform, false);
+            text.transform.localScale = Vector3.one;
             text.transform.localPosition = new Vector3(position.x + 1.2f, position.y, 0f);
             text.text = value; text.font = art.font; text.fontSize = size; text.fontStyle = FontStyles.Bold;
             text.enableWordWrapping = false; text.enableAutoSizing = false;
@@ -115,18 +125,20 @@ namespace RewindRampage
 
         public void UseAuthoredMesh(Mesh mesh) { geometry.sharedMesh = mesh; }
 
-        public void Display(float time, float redMix, float milliseconds, ClockLamps lamps, bool locked, float visibility, float pulse)
+        public void Display(float time, float redMix, float milliseconds, float visibility, float pulse)
         {
             if (runtimeMesh == null)
             {
                 runtimeMesh = Instantiate(geometry.sharedMesh); runtimeMesh.MarkDynamic();
                 geometry.sharedMesh = runtimeMesh; colors = runtimeMesh.colors32;
             }
-            Paint(runtimeMesh, time, redMix, milliseconds, lamps, locked, visibility, pulse);
+            Paint(runtimeMesh, time, redMix, milliseconds, visibility, pulse);
         }
 
-        private void Paint(Mesh mesh, float time, float redMix, float milliseconds, ClockLamps lamps, bool locked, float visibility, float pulse)
+        private void Paint(Mesh mesh, float time, float redMix, float milliseconds, float visibility, float pulse)
         {
+            float centeredX = -Mathf.Lerp(normalCenter, expandedCenter, Mathf.Clamp01(milliseconds));
+            geometry.transform.localPosition = new Vector3(centeredX, 0f, 0f);
             int total = (int)Math.Floor(Math.Max(0d, (double)time) * 1000d);
             int seconds = total / 1000;
             values[0] = seconds / 60 / 10 % 10; values[1] = seconds / 60 % 10;
@@ -151,18 +163,7 @@ namespace RewindRampage
             {
                 Color color = tone; color.a = visibility * brightness * 0.65f * (i == 2 ? milliseconds : 1f);
                 units[i].color = color;
-            }
-            for (int i = 0; i < 4; i++)
-            {
-                bool lit = locked || ((int)lamps & (1 << i)) != 0;
-                Material labelMaterial = lit ? i == 0 ? redLampGlow : iceLampGlow : dormantLamp;
-                if (lampLabels[i].fontSharedMaterial != labelMaterial) lampLabels[i].fontSharedMaterial = labelMaterial;
-                float lampBrightness = locked || i == 1 ? 1f : brightness;
-                Color color = lit ? i == 0 ? Red : Ice : new Color(0.07f, 0.16f, 0.18f);
-                color.a = visibility * LampOpacity * (lit ? 0.68f * lampBrightness : 0.24f);
-                ColorQuad(lampQuads[i], color);
-                color.a = visibility * LampOpacity * (lit ? 0.9f * lampBrightness : 0.3f);
-                lampLabels[i].color = color;
+                units[i].transform.localPosition = unitOrigins[i] + Vector3.right * centeredX;
             }
             mesh.colors32 = colors;
         }

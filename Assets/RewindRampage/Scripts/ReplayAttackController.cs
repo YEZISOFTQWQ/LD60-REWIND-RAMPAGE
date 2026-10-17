@@ -34,6 +34,7 @@ namespace RewindRampage
         private RunRecording recording;
         private int attackCursor, burstCursor;
         private float clipStart, clipEnd;
+        private bool damageEnabled;
         public bool HasWarnings { get; private set; }
 
         public ReplayAttackController(GameTuning tuning, GameArt art, PlayerController player, FeedbackController feedback, Action onPlayerHit)
@@ -47,10 +48,11 @@ namespace RewindRampage
             dashedMaterial = new Material(art.lineMaterial) { name = "Replay warning material", mainTexture = dashTexture };
         }
 
-        public void Initialize(RunRecording source, float start, float end)
+        public void Initialize(RunRecording source, float start, float end, bool enableDamage = true)
         {
             StopAllAttacks();
             recording = source;
+            damageEnabled = enableDamage;
             actions.Clear(); hitActions.Clear();
             for (int i = 0; i < source.Attacks.Count; i++)
             {
@@ -155,7 +157,7 @@ namespace RewindRampage
 
         private bool CanDamage(int actionId, float eventTime)
         {
-            return eventTime - clipStart >= tuning.replayClipProtection && !hitActions.Contains(actionId) &&
+            return damageEnabled && eventTime - clipStart >= tuning.replayClipProtection && !hitActions.Contains(actionId) &&
                 actions.TryGetValue(actionId, out RecordedAction action) && action.StartTime - clipStart >= tuning.replayWarningLead;
         }
 

@@ -4,15 +4,16 @@ using UnityEngine;
 
 namespace RewindRampage
 {
-    // Uses the Act I perimeter and final spawn/speed settings. Shots lock their aim once.
+    // Act I's final settings, softened only for the recorded-self duel. Aim is latched at emission.
     public sealed class Act2Barrage
     {
+        public const float FrequencyMultiplier = 0.45f, SpeedMultiplier = 0.8f;
+        public const float GraceDuration = 2f, CycleDuration = 3f, FireDuration = 2f;
         private sealed class Shot
         {
             public SpriteRenderer Body;
             public LineRenderer Tail;
             public Vector2 Position, Direction;
-            public float Warning;
             public bool Active;
         }
         private readonly GameTuning tuning;
@@ -25,7 +26,17 @@ namespace RewindRampage
         private readonly Stack<Shot> free = new Stack<Shot>();
         private readonly SpriteRenderer[] emitters = new SpriteRenderer[8];
         private RunRecording source;
-        private float clipStart, spawnWait, opacity = 1f;
+        private float clipStart, nextEmission, opacity = 1f;
+        private bool running, damageEnabled;
+        public int TotalEmitted { get; private set; }
+        public bool IsRunning => running;
+
+        public static float NextFireTime(float time)
+        {
+            if (time < GraceDuration) return GraceDuration;
+            float phase = Mathf.Repeat(time - GraceDuration, CycleDuration);
+            return phase < FireDuration ? time : time + CycleDuration - phase;
+        }
 
         public Act2Barrage(GameTuning settings, GameArt visuals, PlayerController subject,
             FeedbackController effects, Func<Vector2, Vector2> chooseEdge)
@@ -45,7 +56,8 @@ namespace RewindRampage
 
         public void Start(RunRecording recording, float start)
         {
-            Clear(); source = recording; clipStart = start; spawnWait = 0f; opacity = 1f;
+            Clear(); source = recording; clipStart = start; nextEmission = GraceDuration;
+            opacity = 1f; running = damageEnabled = true; TotalEmitted = 0;
         }
 
         public void SetReady(float progress)
@@ -59,20 +71,25 @@ namespace RewindRampage
 
         public void Tick(float deltaTime, float duelStart, float playerClock, Vector2 playerStart)
         {
+            if (!running || source == null) return;
             for (int i = 0; i < shots.Count; i++)
-                if (shots[i].Active) Step(shots[i], deltaTime, duelStart, playerClock, playerStart, player.Position);
-            float offset = Mathf.Max(0f, spawnWait);
-            // No cumulative or simultaneous shot limit: the pool grows if necessary.
-            while (offset < deltaTime && player.Health > 0)
+                if (shots[i].Active) Step(shots[i], deltaTime, playerClock, playerStart, player.Position);
+            float end = duelStart + deltaTime;
+            // REST skips emission time entirely; returning to FIRE never repays a backlog.
+            while (nextEmission <= end + 0.000001f && player.Health > 0)
             {
+                float birth = nextEmission;
+                float offset = Mathf.Clamp(birth - duelStart, 0f, deltaTime);
+                Vector2 target = source.SamplePosition(clipStart + birth);
                 Shot shot = GetShot();
-                shot.Position = edgePosition(source.SamplePosition(clipStart + duelStart + offset));
-                shot.Warning = tuning.spawnWarningDuration; shot.Direction = Vector2.zero;
-                Step(shot, deltaTime - offset, duelStart + offset, playerClock,
+                shot.Position = edgePosition(target);
+                shot.Direction = (target - shot.Position).normalized;
+                if (shot.Direction == Vector2.zero) shot.Direction = Vector2.down;
+                TotalEmitted++;
+                Step(shot, deltaTime - offset, playerClock,
                     Vector2.Lerp(playerStart, player.Position, offset / Mathf.Max(0.00001f, deltaTime)), player.Position);
-                offset += tuning.finalSpawnInterval;
+                nextEmission = NextFireTime(birth + Mathf.Max(0.001f, tuning.finalSpawnInterval / FrequencyMultiplier));
             }
-            spawnWait = offset - deltaTime;
         }
 
         private Shot GetShot()
@@ -92,44 +109,28 @@ namespace RewindRampage
             return shot;
         }
 
-        private void Step(Shot shot, float deltaTime, float duelStart, float clock, Vector2 playerStart, Vector2 playerEnd)
+        private void Step(Shot shot, float deltaTime, float clock, Vector2 playerStart, Vector2 playerEnd)
         {
-            float warningSlice = Mathf.Min(deltaTime, Mathf.Max(0f, shot.Warning));
-            shot.Warning -= warningSlice;
-            if (shot.Warning > 0f)
+            Vector2 before = shot.Position;
+            shot.Position += shot.Direction * (tuning.enemySpeed * SpeedMultiplier * deltaTime);
+            shot.Body.sprite = art.disc; shot.Body.transform.localScale = Vector3.one * 0.3f;
+            shot.Tail.enabled = true; shot.Tail.positionCount = 2;
+            shot.Tail.SetPosition(0, shot.Position - shot.Direction * 0.65f); shot.Tail.SetPosition(1, shot.Position);
+            float radius = tuning.playerRadius + tuning.enemyRadius * 0.6f;
+            if (damageEnabled && TrailDamageSystem.DistanceSquaredToSegment(Vector2.zero, before - playerStart, shot.Position - playerEnd) <= radius * radius)
             {
-                shot.Body.sprite = art.ring; shot.Body.transform.localScale = Vector3.one * 0.65f;
+                if (player.TakeDamage(clock)) feedback.Hurt(player.Position);
+                Release(shot); return;
             }
-            else
-            {
-                if (shot.Direction == Vector2.zero)
-                {
-                    Vector2 target = source.SamplePosition(clipStart + duelStart + warningSlice);
-                    shot.Direction = (target - shot.Position).normalized;
-                    if (shot.Direction == Vector2.zero) shot.Direction = Vector2.down;
-                }
-                Vector2 before = shot.Position;
-                shot.Position += shot.Direction * (tuning.enemySpeed * (deltaTime - warningSlice));
-                shot.Body.sprite = art.disc; shot.Body.transform.localScale = Vector3.one * 0.3f;
-                shot.Tail.enabled = true; shot.Tail.positionCount = 2;
-                shot.Tail.SetPosition(0, shot.Position - shot.Direction * 0.65f); shot.Tail.SetPosition(1, shot.Position);
-                Vector2 activePlayerStart = Vector2.Lerp(playerStart, playerEnd, warningSlice / Mathf.Max(0.00001f, deltaTime));
-                float radius = tuning.playerRadius + tuning.enemyRadius * 0.6f;
-                if (TrailDamageSystem.DistanceSquaredToSegment(Vector2.zero, before - activePlayerStart, shot.Position - playerEnd) <= radius * radius)
-                {
-                    if (player.TakeDamage(clock)) feedback.Hurt(player.Position);
-                    Release(shot); return;
-                }
-                Vector2 half = tuning.arenaHalfSize + Vector2.one;
-                if (Mathf.Abs(shot.Position.x) > half.x || Mathf.Abs(shot.Position.y) > half.y) { Release(shot); return; }
-            }
+            Vector2 half = tuning.arenaHalfSize + Vector2.one;
+            if (Mathf.Abs(shot.Position.x) > half.x || Mathf.Abs(shot.Position.y) > half.y) { Release(shot); return; }
             shot.Body.transform.position = shot.Position;
             Tint(shot);
         }
 
         private void Tint(Shot shot)
         {
-            Color color = GameArt.Red; color.a = opacity * (shot.Warning > 0f ? 0.45f : 0.9f);
+            Color color = GameArt.Red; color.a = opacity * 0.9f;
             shot.Body.color = color; color.a *= 0.5f; shot.Tail.startColor = shot.Tail.endColor = color;
         }
 
@@ -140,7 +141,7 @@ namespace RewindRampage
 
         public void Freeze()
         {
-            foreach (Shot shot in shots) if (shot.Active && shot.Warning > 0f) Release(shot);
+            running = damageEnabled = false;
         }
 
         public void SetOpacity(float value)
@@ -153,6 +154,7 @@ namespace RewindRampage
         public void Clear()
         {
             opacity = 1f;
+            running = damageEnabled = false; TotalEmitted = 0;
             free.Clear();
             foreach (Shot shot in shots) { shot.Active = false; shot.Body.enabled = shot.Tail.enabled = false; free.Push(shot); }
             foreach (SpriteRenderer emitter in emitters) emitter.enabled = false;
