@@ -2,6 +2,9 @@
 
 > **The past was never erased.**
 
+[English](README.md) | [简体中文](README_CN.md)
+
+
 **REWIND RAMPAGE** is a fast-paced, neon-styled 2D action game created for **Ludum Dare 60**, inspired by the theme **Old Tech**.
 
 Move, leave a trail, and rewind through your own movements to fight back against relentless pursuers. But the machine is recording more than your survival: every second you leave behind may become something you have to face.
