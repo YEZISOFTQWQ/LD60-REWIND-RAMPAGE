@@ -440,12 +440,6 @@ namespace RewindRampage
             shake = 0.12f;
         }
 
-        public void PlayTapeSkip()
-        {
-            effectsSource.PlayOneShot(paradoxClip, 0.4f);
-            shake = 0.15f;
-        }
-
         public void PlayReplayWarning() { effectsSource.PlayOneShot(deniedClip, 0.35f); }
 
         public void ParadoxHit(Vector2 position)

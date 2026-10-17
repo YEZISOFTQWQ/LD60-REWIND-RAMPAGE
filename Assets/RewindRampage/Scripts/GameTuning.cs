@@ -25,7 +25,6 @@ namespace RewindRampage
         [Min(1f)] public float roundDuration = 90f;
         [Min(0.1f)] public float enemySpeed = 2.5f;
         [Min(0.01f)] public float enemyRadius = 0.32f;
-        [Min(1)] public int maximumEnemies = 35;
         [Min(0.1f)] public float initialSpawnInterval = 1.5f;
         [Min(0.1f)] public float finalSpawnInterval = 0.38f;
         [Min(0f)] public float spawnWarningDuration = 0.5f;
@@ -55,7 +54,6 @@ namespace RewindRampage
         [Min(0.1f)] public float ghostBossRadius = 0.85f;
         [Min(0f)] public float ghostBossInvulnerability = 0.7f;
         [Min(0.1f)] public float tapeRewindTransition = 1.8f;
-        [Min(0.1f)] public float tapeCutDuration = 0.4f;
         [Min(0.1f)] public float replayWarningLead = 0.5f;
         [Min(0f)] public float replayClipProtection = 0.5f;
 

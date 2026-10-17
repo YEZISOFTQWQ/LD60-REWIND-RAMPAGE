@@ -28,8 +28,11 @@ namespace RewindRampage
             this.enemies = enemies;
             this.onKill = onKill;
             explosions = new ExplosionResolver(ApplyArea, onExplosion);
-            for (int i = 0; i < enemies.Enemies.Count; i++) enemies.Enemies[i].OnDeath += OnEnemyDeath;
+            for (int i = 0; i < enemies.Enemies.Count; i++) RegisterEnemy(enemies.Enemies[i]);
+            enemies.EnemyCreated += RegisterEnemy;
         }
+
+        private void RegisterEnemy(EnemyController enemy) { enemy.OnDeath += OnEnemyDeath; }
 
         public void Begin()
         {
@@ -123,6 +126,7 @@ namespace RewindRampage
         public void Dispose()
         {
             EndAttack();
+            enemies.EnemyCreated -= RegisterEnemy;
             for (int i = 0; i < enemies.Enemies.Count; i++)
                 if (enemies.Enemies[i] != null) enemies.Enemies[i].OnDeath -= OnEnemyDeath;
         }

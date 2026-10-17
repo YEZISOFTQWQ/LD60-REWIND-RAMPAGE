@@ -107,7 +107,7 @@ namespace RewindRampage
             switch (game.State)
             {
                 case SessionState.Title:
-                    view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4";
+                    view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4.1";
                     view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
                     view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
                     view.menuInstructions.text = TitleInstructions;
@@ -184,7 +184,7 @@ namespace RewindRampage
                 displayedEnemies = hostileCount;
                 if (game.InArchive) view.enemyCount.SetText("ECHOES {0}/{1} / REWINDING {2}", displayedEnemies, game.Archive.EchoLimit, game.Archive.AttackingCount);
                 else if (game.InDuel) view.enemyCount.SetText("PAST SELF HP  {0} / {1}", displayedEnemies, game.Tuning.ghostBossHealth);
-                else view.enemyCount.SetText("HOSTILES  {0:00} / {1}", displayedEnemies, game.Tuning.maximumEnemies);
+                else view.enemyCount.SetText("HOSTILES  {0:00}", displayedEnemies);
             }
 
             if (game.Player.Health < previousHealth) damageFlash = 0.55f;
@@ -231,7 +231,7 @@ namespace RewindRampage
                 if (game.State == SessionState.Playing && phase == 2 && game.Tuning.enableVolatileEnemies)
                     ShowNotice("VOLATILE SIGNALS ONLINE / ORANGE HEXAGONS EXPLODE ON DEATH.");
             }
-            if (game.InDuel) view.phase.SetText("ACT II / PLAYBACK / CLIP {0} OF 3", game.Duel.ClipIndex + 1);
+            if (game.InDuel) view.phase.text = "ACT II / PLAYBACK / FINAL 30 SECONDS";
             if (game.InArchive) view.phase.text = ArchivePhases[game.Archive.Phase];
 
             string hint = game.InArchive ? rewinding ? "ECHOES FROZEN / THE ARCHIVE CLOCK IS STILL RUNNING." : game.Archive.Core.IsDestroyed
@@ -284,9 +284,10 @@ namespace RewindRampage
             view.scanlines.color = game.InDuel || game.InArchive ? new Color(1f, 1f, 1f, 0.35f) : Color.white;
             if (!visible) return;
             GhostDuelState state = game.Duel.State;
-            view.duelTitle.text = state == GhostDuelState.TransitionIn ? "END OF TAPE" : state == GhostDuelState.TapeCut ? "TAPE SKIP" : "DUPLICATE SUBJECT DETECTED";
-            view.duelDetail.text = state == GhostDuelState.TransitionIn ? "REWINDING THE FULL RECORDING..." : state == GhostDuelState.TapeCut ? "TRACKING... / COMBAT CLOCK HELD" : "ERASE YOUR PAST";
-            float tapeTime = state == GhostDuelState.TransitionIn ? game.Tuning.roundDuration * (1f - game.Duel.TransitionProgress) : game.Duel.ReplayTime;
+            view.duelTitle.text = state == GhostDuelState.TransitionIn ? "END OF TAPE" : "DUPLICATE SUBJECT DETECTED";
+            view.duelDetail.text = state == GhostDuelState.TransitionIn ? "SEEKING THE FINAL 30 SECONDS..." : "ERASE YOUR PAST";
+            float tapeTime = state == GhostDuelState.TransitionIn ? Mathf.Lerp(game.Duel.Recording.Duration,
+                game.Duel.ReplayStart, game.Duel.TransitionProgress) : game.Duel.ReplayTime;
             int seconds = Mathf.FloorToInt(tapeTime);
             view.duelTapeTime.text = (seconds / 60).ToString("00") + ":" + (seconds % 60).ToString("00");
             float black = state == GhostDuelState.TransitionIn && game.Duel.TransitionProgress > 0.9f ? 1f : state == GhostDuelState.Preparing ? 0.55f : 0.2f;
@@ -324,15 +325,16 @@ namespace RewindRampage
 
         public void SetEnglishPreview()
         {
-            view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4";
+            view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4.1";
             view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
             view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
             view.menuInstructions.text = TitleInstructions;
             view.menuStats.text = "3 ACTS / 90s REC / 30s PLAYBACK / 90s ARCHIVE";
             view.instructions.text = "WASD TO RECORD A PATH. LURE THE RED CHASERS BEHIND YOU.";
             view.primaryLabel.text = "PLAY TAPE  >  [ SPACE ]";
+            view.enemyCount.text = "HOSTILES  00";
             view.notice.text = view.bannerTitle.text = view.bannerDetail.text = view.chainLabel.text = string.Empty;
-            view.nodeStatus.text = "REC / PLAYBACK / THE ARCHIVE / DEMO v0.4";
+            view.nodeStatus.text = "REC / PLAYBACK / THE ARCHIVE / DEMO v0.4.1";
         }
 
         public void SetArchivePreview()

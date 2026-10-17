@@ -11734,7 +11734,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: HOSTILES  00 / 35
+  m_text: HOSTILES  00
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 31c00f26a680b7f47b28bb3c7b3c1c09, type: 2}
   m_sharedMaterial: {fileID: 8350918981624038913, guid: 31c00f26a680b7f47b28bb3c7b3c1c09, type: 2}
@@ -16539,7 +16539,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: REC / PLAYBACK / THE ARCHIVE / DEMO v0.4
+  m_text: REC / PLAYBACK / THE ARCHIVE / DEMO v0.4.1
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 31c00f26a680b7f47b28bb3c7b3c1c09, type: 2}
   m_sharedMaterial: {fileID: 8350918981624038913, guid: 31c00f26a680b7f47b28bb3c7b3c1c09, type: 2}
@@ -17631,7 +17631,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: TAPE 004 / OLD TECH / DEMO v0.4
+  m_text: TAPE 004 / OLD TECH / DEMO v0.4.1
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 31c00f26a680b7f47b28bb3c7b3c1c09, type: 2}
   m_sharedMaterial: {fileID: 8350918981624038913, guid: 31c00f26a680b7f47b28bb3c7b3c1c09, type: 2}

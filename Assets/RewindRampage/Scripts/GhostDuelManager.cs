@@ -3,12 +3,11 @@ using UnityEngine;
 
 namespace RewindRampage
 {
-    public enum GhostDuelState { Inactive, TransitionIn, Preparing, Fighting, TapeCut, Victory, Defeat }
+    public enum GhostDuelState { Inactive, TransitionIn, Preparing, Fighting, Victory, Defeat }
 
     public sealed class GhostDuelManager : IDisposable
     {
         public const float Duration = 30f;
-        public const float ClipDuration = 10f;
         private readonly GameTuning tuning;
         private readonly PlayerController player;
         private readonly FeedbackController feedback;
@@ -22,9 +21,9 @@ namespace RewindRampage
         public GhostDuelState State { get; private set; }
         public float DuelTime { get; private set; }
         public float ReplayTime { get; private set; }
-        public int ClipIndex { get; private set; }
+        public float ReplayStart { get; private set; }
         public float Remaining => Mathf.Max(0f, Duration - DuelTime);
-        public bool IsTransition => State == GhostDuelState.TransitionIn || State == GhostDuelState.Preparing || State == GhostDuelState.TapeCut;
+        public bool IsTransition => State == GhostDuelState.TransitionIn || State == GhostDuelState.Preparing;
         public float TransitionProgress => State == GhostDuelState.TransitionIn ? 1f - transitionRemaining / tuning.tapeRewindTransition : 0f;
         public Vector2 GhostPosition => ghost.Position;
 
@@ -48,13 +47,14 @@ namespace RewindRampage
             if (recording == null || recording.Frames.Count < 2) throw new InvalidOperationException("A completed recording is required for the duel.");
             Recording = recording;
             Boss.Stop(); attacks.StopAllAttacks();
-            DuelTime = ReplayTime = 0f; ClipIndex = 0;
-            ghost.Initialize(recording);
+            DuelTime = 0f;
+            ReplayTime = ReplayStart = Mathf.Max(0f, recording.Duration - Duration);
+            ghost.Initialize(recording, ReplayStart, recording.Duration);
             if (rewindTransition)
             {
                 State = GhostDuelState.TransitionIn;
                 transitionRemaining = tuning.tapeRewindTransition;
-                ghost.ShowTapeFlashback(0f);
+                ghost.ShowTapeFlashback(0f, ReplayStart);
                 feedback.PlayTapeTransition();
             }
             else Prepare();
@@ -65,8 +65,8 @@ namespace RewindRampage
             feedback.StopRewind();
             preparePlayer();
             Boss.ResetHealth();
-            ghost.Initialize(Recording);
-            attacks.Initialize(Recording);
+            ghost.Initialize(Recording, ReplayStart, Recording.Duration);
+            attacks.Initialize(Recording, ReplayStart, Recording.Duration);
             State = GhostDuelState.Preparing;
             transitionRemaining = 1.1f;
         }
@@ -76,21 +76,11 @@ namespace RewindRampage
             if (!IsTransition) return;
             transitionRemaining = Mathf.Max(0f, transitionRemaining - deltaTime);
             ghost.TickVisual(deltaTime);
-            if (State == GhostDuelState.TransitionIn) ghost.ShowTapeFlashback(TransitionProgress);
+            if (State == GhostDuelState.TransitionIn) ghost.ShowTapeFlashback(TransitionProgress, ReplayStart);
             if (transitionRemaining > 0f) return;
             if (State == GhostDuelState.TransitionIn) Prepare();
-            else if (State == GhostDuelState.TapeCut)
-            {
-                ClipIndex++;
-                ReplayTime = ClipStart;
-                ghost.JumpToClip(ClipStart, ClipStart + ClipDuration);
-                attacks.BeginClip(ClipStart, ClipStart + ClipDuration);
-                State = GhostDuelState.Fighting;
-            }
             else State = GhostDuelState.Fighting;
         }
-
-        private float ClipStart => ClipIndex == 0 ? 0f : ClipIndex == 1 ? 40f : 80f;
 
         public void SetPlayerClock(float time) { Boss.SetClock(time); }
 
@@ -103,25 +93,16 @@ namespace RewindRampage
         public void Advance(float deltaTime, float playerClock, Vector2 previousPlayerPosition)
         {
             if (State != GhostDuelState.Fighting || ResolveOutcome()) return;
-            float boundary = (ClipIndex + 1) * ClipDuration;
-            float advance = Mathf.Min(deltaTime, boundary - DuelTime);
+            float advance = Mathf.Min(deltaTime, Remaining);
             DuelTime += advance;
-            // Keep the old clip's endpoint until the cut has completed; never interpolate across a cut.
-            ReplayTime = ClipStart + DuelTime - ClipIndex * ClipDuration;
+            // Replay the final 30 seconds continuously at the original recording speed.
+            ReplayTime = Mathf.Min(Recording.Duration, ReplayStart + DuelTime);
             ghost.SetReplayTime(ReplayTime);
             attacks.TickVisual(advance);
             attacks.ProcessEvents(ReplayTime, playerClock, previousPlayerPosition, advance);
             attacks.ShowUpcomingWarnings(ReplayTime);
             ghost.IsWarning = attacks.HasWarnings;
-            if (ResolveOutcome()) return;
-            if (DuelTime >= boundary && ClipIndex < 2)
-            {
-                State = GhostDuelState.TapeCut;
-                transitionRemaining = tuning.tapeCutDuration;
-                attacks.StopAllAttacks();
-                ghost.IsWarning = false;
-                feedback.PlayTapeSkip();
-            }
+            ResolveOutcome();
         }
 
         public bool ResolveOutcome()
@@ -147,7 +128,7 @@ namespace RewindRampage
             State = GhostDuelState.Inactive;
             Recording = null;
             Boss.Stop(); attacks.ClearRecording(); ghost.ClearRecording();
-            DuelTime = ReplayTime = 0f; ClipIndex = 0;
+            DuelTime = ReplayTime = ReplayStart = 0f;
         }
 
         public void Dispose() { attacks.Dispose(); }

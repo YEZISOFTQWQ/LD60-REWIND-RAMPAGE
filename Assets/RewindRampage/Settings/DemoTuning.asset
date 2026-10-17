@@ -27,7 +27,6 @@ MonoBehaviour:
   roundDuration: 90
   enemySpeed: 2.5
   enemyRadius: 0.32
-  maximumEnemies: 35
   initialSpawnInterval: 1.5
   finalSpawnInterval: 0.38
   spawnWarningDuration: 0.5
@@ -51,7 +50,6 @@ MonoBehaviour:
   ghostBossRadius: 0.85
   ghostBossInvulnerability: 0.7
   tapeRewindTransition: 1.8
-  tapeCutDuration: 0.4
   replayWarningLead: 0.5
   replayClipProtection: 0.5
   archivePlayerHealth: 3

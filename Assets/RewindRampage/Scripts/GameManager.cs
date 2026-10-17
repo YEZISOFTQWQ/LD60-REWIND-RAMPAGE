@@ -281,7 +281,7 @@ namespace RewindRampage
             if (duel.State != GhostDuelState.Fighting || duel.ResolveOutcome()) return;
             bool wasRewinding = rewind.IsRewinding;
             if (!wasRewinding)
-                deltaTime = Mathf.Min(deltaTime, (duel.ClipIndex + 1) * GhostDuelManager.ClipDuration - duel.DuelTime);
+                deltaTime = Mathf.Min(deltaTime, duel.Remaining);
             float previousTime = Elapsed;
             Vector2 previousPosition = player.Position;
             Elapsed += deltaTime;

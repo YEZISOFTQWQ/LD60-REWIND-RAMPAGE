@@ -7,13 +7,16 @@ namespace RewindRampage
     {
         [SerializeField] private EnemyController enemyPrefab;
         private GameTuning tuning;
-        private readonly List<EnemyController> enemies = new List<EnemyController>(35);
+        // Prewarm for the opening; this is a pool size, not a population limit.
+        private const int InitialPoolSize = 35;
+        private readonly List<EnemyController> enemies = new List<EnemyController>(InitialPoolSize);
         private float spawnTimer;
         private bool tutorialSpawned;
         private int nextSpawnId;
         private bool firstVolatileSpawned;
 
         public IReadOnlyList<EnemyController> Enemies => enemies;
+        public event System.Action<EnemyController> EnemyCreated;
         public int AliveCount
         {
             get
@@ -40,13 +43,17 @@ namespace RewindRampage
         public void Initialize(GameTuning settings)
         {
             tuning = settings;
-            for (int i = 0; i < tuning.maximumEnemies; i++)
-            {
-                EnemyController enemy = Instantiate(enemyPrefab, transform);
-                enemy.name = "Chaser " + (i + 1).ToString("00");
-                enemy.Despawn();
-                enemies.Add(enemy);
-            }
+            while (enemies.Count < InitialPoolSize) CreateEnemy();
+        }
+
+        private EnemyController CreateEnemy()
+        {
+            EnemyController enemy = Instantiate(enemyPrefab, transform);
+            enemy.name = "Chaser " + (enemies.Count + 1).ToString("00");
+            enemy.Despawn();
+            enemies.Add(enemy);
+            EnemyCreated?.Invoke(enemy);
+            return enemy;
         }
 
         public void ResetEnemies()
@@ -121,7 +128,9 @@ namespace RewindRampage
                 enemies[i].Spawn(++nextSpawnId, tuning.ClampToArena(position, tuning.enemyRadius), speed, warning, isVolatile);
                 return true;
             }
-            return false;
+            EnemyController added = CreateEnemy();
+            added.Spawn(++nextSpawnId, tuning.ClampToArena(position, tuning.enemyRadius), speed, warning, isVolatile);
+            return true;
         }
 
         public void SetFrozenVisuals(bool frozen)

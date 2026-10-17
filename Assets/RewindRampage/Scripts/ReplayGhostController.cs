@@ -61,13 +61,13 @@ namespace RewindRampage
             StopPlayback();
         }
 
-        public void Initialize(RunRecording source)
+        public void Initialize(RunRecording source, float start, float end)
         {
             recording = source;
             flashRemaining = visualTime = 0f;
             IsWarning = IsFrozen = false;
             root.gameObject.SetActive(true);
-            JumpToClip(0f, 10f);
+            JumpToClip(start, end);
         }
 
         public void JumpToClip(float start, float end)
@@ -101,10 +101,10 @@ namespace RewindRampage
             for (int i = frameCursor + 1; i <= last; i++) future.SetPosition(i - frameCursor, recording.Frames[i].Position);
         }
 
-        public void ShowTapeFlashback(float progress)
+        public void ShowTapeFlashback(float progress, float destinationTime)
         {
             clipStart = 0f; clipEnd = recording.Duration;
-            SetReplayTime(recording.Duration * (1f - progress));
+            SetReplayTime(Mathf.Lerp(recording.Duration, destinationTime, progress));
             future.positionCount = 0;
         }
 

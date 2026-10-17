@@ -47,7 +47,7 @@ namespace RewindRampage
             dashedMaterial = new Material(art.lineMaterial) { name = "Replay warning material", mainTexture = dashTexture };
         }
 
-        public void Initialize(RunRecording source)
+        public void Initialize(RunRecording source, float start, float end)
         {
             StopAllAttacks();
             recording = source;
@@ -62,7 +62,7 @@ namespace RewindRampage
                 }
                 action.EndTime = attack.Time; action.Last = i;
             }
-            BeginClip(0f, 10f);
+            BeginClip(start, end);
         }
 
         public void BeginClip(float start, float end)
