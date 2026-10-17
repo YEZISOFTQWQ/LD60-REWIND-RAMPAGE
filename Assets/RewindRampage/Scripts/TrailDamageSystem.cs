@@ -13,11 +13,13 @@ namespace RewindRampage
         private readonly ExplosionResolver explosions;
         private bool attackActive;
         private GhostBossHealth ghostBoss;
+        private Act3Director archive;
 
         public int KillCount { get; private set; }
         public int Score { get; private set; }
         public int RewindId { get; private set; }
         public void SetBossTarget(GhostBossHealth boss) { ghostBoss = boss; }
+        public void SetArchiveTarget(Act3Director director) { archive = director; }
 
         public TrailDamageSystem(GameTuning tuning, EnemySpawner enemies, Action<RewindKill> onKill,
             Action<ExplosionEvent, int> onExplosion)
@@ -43,6 +45,7 @@ namespace RewindRampage
         {
             if (!attackActive) return;
             ghostBoss?.HitSegment(from, to, tuning.attackRadius, RewindId);
+            archive?.HitSegment(from, to, tuning.attackRadius, RewindId);
             float radius = tuning.attackRadius + tuning.enemyRadius;
             IReadOnlyList<EnemyController> pool = enemies.Enemies;
             for (int i = 0; i < pool.Count; i++)
@@ -65,6 +68,7 @@ namespace RewindRampage
         {
             if (!attackActive || context.RewindId != RewindId) return;
             if (context.Source == DamageSource.GhostNode) ghostBoss?.HitArea(position, radius, RewindId);
+            if (context.Source == DamageSource.GhostNode) archive?.HitArea(position, radius, RewindId);
             float distance = radius + tuning.enemyRadius;
             for (int i = 0; i < enemies.Enemies.Count; i++)
             {
@@ -77,15 +81,25 @@ namespace RewindRampage
         private void OnEnemyDeath(EnemyController enemy, DamageContext context)
         {
             if (!attackActive || context.RewindId != RewindId) return;
-            KillCount++;
-            int reward = 100 + (KillCount - 1) * 50;
-            Score += reward;
-            int chainKills = context.Source == DamageSource.VolatileExplosion ? explosions.RegisterChainKill(context.ChainId) : 0;
-            onKill(new RewindKill(enemy.Position, reward, KillCount, context.Source, chainKills));
+            RegisterKill(enemy.Position, context.Source, context.ChainId);
             if (!enemy.IsVolatile || (!tuning.enableChainExplosions && context.Source == DamageSource.VolatileExplosion)) return;
             int chainId = context.ChainId != 0 ? context.ChainId : explosions.StartChain();
             explosions.EnqueueExplosion(new ExplosionEvent(enemy.Position, tuning.volatileExplosionRadius,
                 tuning.volatileExplosionDamage, new DamageContext(DamageSource.VolatileExplosion, RewindId, chainId)));
+        }
+
+        public void RegisterArchiveKill(Vector2 position, DamageSource source)
+        {
+            if (attackActive) RegisterKill(position, source, 0);
+        }
+
+        private void RegisterKill(Vector2 position, DamageSource source, int chainId)
+        {
+            KillCount++;
+            int reward = 100 + (KillCount - 1) * 50;
+            Score += reward;
+            int chainKills = source == DamageSource.VolatileExplosion ? explosions.RegisterChainKill(chainId) : 0;
+            onKill(new RewindKill(position, reward, KillCount, source, chainKills));
         }
 
         public void ResolveExplosions()

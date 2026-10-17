@@ -21,10 +21,10 @@ namespace RewindRampage.Editor
             Directory.CreateDirectory(Path.GetDirectoryName(output));
             BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
-                scenes = new[] { "Assets/Scenes/SampleScene.unity" },
+                scenes = new[] { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/Act3.unity" },
                 locationPathName = output,
                 target = BuildTarget.StandaloneWindows64,
-                options = BuildOptions.None
+                options = BuildOptions.Development
             });
             if (report.summary.result != BuildResult.Succeeded)
                 throw new InvalidOperationException("Windows preview export failed: " + report.summary.result);
@@ -55,12 +55,12 @@ namespace RewindRampage.Editor
             PlayerSettings.WebGL.memorySize = 256;
             PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.ExplicitlyThrownExceptionsOnly;
             PlayerSettings.SetIl2CppCompilerConfiguration(BuildTargetGroup.WebGL, Il2CppCompilerConfiguration.Release);
-            PlayerSettings.bundleVersion = "0.3.0";
+            PlayerSettings.bundleVersion = "0.4.0";
             EditorUserBuildSettings.development = false;
 
             BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
-                scenes = new[] { "Assets/Scenes/SampleScene.unity" },
+                scenes = new[] { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/Act3.unity" },
                 locationPathName = output,
                 target = BuildTarget.WebGL,
                 options = BuildOptions.None

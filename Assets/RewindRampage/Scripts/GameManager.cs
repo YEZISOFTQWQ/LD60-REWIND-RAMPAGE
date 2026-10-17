@@ -3,7 +3,7 @@ using UnityEngine;
 namespace RewindRampage
 {
     public enum SessionState { Title, Playing, Paused, Results }
-    public enum GameAct { Rec, Playback }
+    public enum GameAct { Rec, Playback, Archive }
 
     public sealed class GameManager : MonoBehaviour
     {
@@ -14,6 +14,7 @@ namespace RewindRampage
         [SerializeField] private FeedbackController feedback;
         [SerializeField] private RewindHud hud;
         [SerializeField] private Camera arenaCamera;
+        [SerializeField] private GameAct initialAct = GameAct.Rec;
 
         private TrailRecorder recorder;
         private TrailDamageSystem damage;
@@ -22,6 +23,7 @@ namespace RewindRampage
         private GhostNodeController ghostNodes;
         private RunRecorder runRecorder;
         private GhostDuelManager duel;
+        private Act3Director archive;
         private int lastWidth;
         private int lastHeight;
         private Vector2 movementStart;
@@ -29,6 +31,8 @@ namespace RewindRampage
         public SessionState State { get; private set; }
         public GameAct Act { get; private set; }
         public bool InDuel => Act == GameAct.Playback;
+        public bool InArchive => Act == GameAct.Archive;
+        public Act3Director Archive => archive;
         public GhostDuelManager Duel => duel;
         public GameTuning Tuning => tuning;
         public PlayerController Player => player;
@@ -48,6 +52,7 @@ namespace RewindRampage
         public int EnemyCount => spawner.AliveCount;
         public bool Survived { get; private set; }
         public bool Muted => feedback.Muted;
+        public void ConfigureEntryAct(GameAct entry) { initialAct = entry; }
 
         public void Configure(GameTuning settings, GameArt visuals, PlayerController playerController,
             EnemySpawner enemySpawner, FeedbackController effects, RewindHud view, Camera camera)
@@ -81,12 +86,17 @@ namespace RewindRampage
                 () => hud.ShowBurst("PARADOX HIT", "THE PAST IS COMING APART", GameArt.Gold, 1.2f),
                 () => hud.ShowNotice("HISTORICAL ATTACK HIT / WATCH THE RED WARNINGS."), OnDuelFinished);
             damage.SetBossTarget(duel.Boss);
+            archive = new Act3Director(tuning, art, player, feedback, damage.RegisterArchiveKill,
+                OnArchivePhaseChanged, OnArchiveCoreHit,
+                position => { feedback.Hurt(position); hud.ShowNotice("ECHO REWIND HIT / DODGE THE LOCKED RED PATHS."); }, OnArchiveFinished);
+            damage.SetArchiveTarget(archive);
             BestScore = PlayerPrefs.GetInt("RewindRampage.BestScore", 0);
             player.ResetPlayer();
             recorder.Clear(player.Position, 0f);
             State = SessionState.Title;
             hud.Initialize(this);
             hud.ShowState();
+            if (initialAct == GameAct.Archive) StartArchive();
         }
 
         private void Update()
@@ -103,11 +113,13 @@ namespace RewindRampage
             float effectDelta = State == SessionState.Paused ? 0f : Time.deltaTime;
             feedback.Tick(effectDelta);
             ghostNodes.Tick(effectDelta, intersections.Nodes);
+            archive.TickVisual(effectDelta);
             hud.Tick(Time.unscaledDeltaTime);
         }
 
         private void TickGame(float deltaTime)
         {
+            if (InArchive) { TickArchive(deltaTime); return; }
             if (InDuel) { TickDuel(deltaTime); return; }
             float previousTime = Elapsed;
             deltaTime = Mathf.Min(deltaTime, tuning.roundDuration - Elapsed);
@@ -163,6 +175,69 @@ namespace RewindRampage
             runRecorder.RecordFrame(player.Position, Elapsed, rewind.IsRewinding);
             if (player.Health <= 0) EndRun(false);
             else if (Elapsed >= tuning.roundDuration) BeginPlayback();
+        }
+
+        private void TickArchive(float deltaTime)
+        {
+            deltaTime = Mathf.Min(deltaTime, archive.Remaining);
+            float previousTime = Elapsed;
+            Vector2 previousPosition = player.Position;
+            Elapsed += deltaTime;
+            rewind.TickCooldown(deltaTime);
+            bool wasRewinding = rewind.IsRewinding, started = false;
+            if (wasRewinding) rewind.Step(deltaTime, Elapsed);
+            else
+            {
+                player.Move(MovementInput(), deltaTime);
+                recorder.Record(previousPosition, player.Position, previousTime, Elapsed);
+                if (Input.GetKeyDown(KeyCode.Space))
+                {
+                    started = rewind.TryStart(Elapsed);
+                    if (started) RewindCount++;
+                    else { feedback.PlayDenied(); hud.ShowNotice("KEEP MOVING / RECORD A PATH AND LET THE TAPE RECHARGE."); }
+                }
+            }
+            archive.Tick(deltaTime, Elapsed, previousPosition, wasRewinding || started);
+            feedback.DrawHistory(recorder, rewind.IsRewinding);
+            player.UpdateVisual(Elapsed, rewind.IsRewinding, rewind.CooldownFraction, rewind.IsReady);
+        }
+
+        public void StartArchive()
+        {
+            duel.Reset(); runRecorder.ClearRecording(); archive.Reset();
+            feedback.ResetFeedback(); rewind.Reset(); spawner.ResetEnemies();
+            player.ResetPlayer(tuning.archivePlayerHealth);
+            Act = GameAct.Archive;
+            Elapsed = 0f;
+            Score = TotalKills = BestRewindKills = BestCombo = RewindCount = 0;
+            TotalGhostNodeTriggers = TotalChainKills = 0;
+            Survived = false;
+            intersections.IgnoreUnlockDelay = true;
+            recorder.Clear(player.Position, Elapsed);
+            archive.Start();
+            State = SessionState.Playing;
+            feedback.SetPaused(false); feedback.PlayStart();
+            hud.ShowState();
+            hud.ShowBurst("ACT III / THE ARCHIVE", "ERASE THE CORE AT 00:30. SURVIVE UNTIL 00:00.", GameArt.Gold, 2.2f);
+        }
+
+        private void OnArchivePhaseChanged(int phase)
+        {
+            hud.ShowBurst(phase == 1 ? "PHASE II / THE HUNT" : "TIME CORE ONLINE",
+                phase == 1 ? "MORE ECHOES. MORE CROSSING PATHS." : "THREE HITS TO BREAK THE CORE. THE CLOCK KEEPS RUNNING.", GameArt.Gold, 2f);
+        }
+
+        private void OnArchiveCoreHit(bool destroyed)
+        {
+            feedback.ArchiveCoreImpact(Vector2.zero, destroyed);
+            hud.ShowCoreImpact(destroyed);
+        }
+
+        private void OnArchiveFinished(bool victory)
+        {
+            Survived = victory; State = SessionState.Results;
+            rewind.Reset(); feedback.PlayEnd(victory);
+            SaveBestScore(); hud.ShowState();
         }
 
         private Vector2 MovementInput()
@@ -283,13 +358,13 @@ namespace RewindRampage
             TotalGhostNodeTriggers++;
             // The world-space splice effect already labels the node. Preserve the
             // boss's PARADOX HIT headline when the same burst damages the past self.
-            if (InDuel) return;
+            if (InDuel || InArchive) return;
             hud.ShowBurst("SPLICE BURST", "DOUBLE EXPOSURE DETONATED", GameArt.Gold, 1.1f);
         }
 
         private void OnRewindFinished(int kills, int points)
         {
-            if (InDuel) return;
+            if (InDuel || InArchive) return;
             BestRewindKills = Mathf.Max(BestRewindKills, kills);
             if (kills > 0)
                 hud.ShowBurst(kills == 1 ? "REWIND KILL" : kills + "x COMBO", kills + " ELIMINATED / +" + points, GameArt.Gold, 1.5f);
@@ -299,6 +374,7 @@ namespace RewindRampage
 
         public void StartRun()
         {
+            archive.Reset();
             duel.Reset();
             runRecorder.ClearRecording();
             Act = GameAct.Rec;
@@ -322,7 +398,16 @@ namespace RewindRampage
         public void ActivatePrimary()
         {
             if (State == SessionState.Paused) TogglePause();
+            else if (State == SessionState.Results && InArchive) StartArchive();
             else if (State == SessionState.Results && InDuel && !Survived) RetryDuel();
+            else if (State == SessionState.Results && InDuel && Survived) Act3TestEntry.LoadArchive();
+            else StartRun();
+        }
+
+        public void SecondaryAction()
+        {
+            if (InArchive && State == SessionState.Results) Act3TestEntry.LoadMainMenu();
+            else if (InArchive) StartArchive();
             else StartRun();
         }
 
@@ -395,6 +480,7 @@ namespace RewindRampage
             damage?.Dispose();
             intersections?.Dispose();
             duel?.Dispose();
+            archive?.Dispose();
         }
     }
 }

@@ -59,6 +59,15 @@ namespace RewindRampage
         [Min(0.1f)] public float replayWarningLead = 0.5f;
         [Min(0f)] public float replayClipProtection = 0.5f;
 
+        [Header("Act III / Archive")]
+        [Min(1)] public int archivePlayerHealth = 3;
+        [Min(1)] public int archiveEchoHealth = 1;
+        [Min(0.1f)] public float archiveEchoSpeed = 2.4f;
+        [Min(0.1f)] public float archiveEchoRadius = 0.43f;
+        [Min(0.1f)] public float archiveCoreRadius = 0.95f;
+        [Min(1f)] public float archiveSpawnDistance = 4.5f;
+        [Min(0.1f)] public float archiveSpawnInterval = 0.9f;
+
         public Vector2 ClampToArena(Vector2 position, float radius)
         {
             return new Vector2(

@@ -24,9 +24,9 @@ namespace RewindRampage
 
         public void Initialize(GameTuning settings) { tuning = settings; }
 
-        public void ResetPlayer()
+        public void ResetPlayer(int health = -1)
         {
-            Health = tuning.startingHealth;
+            Health = health > 0 ? health : tuning.startingHealth;
             invulnerableUntil = 0f;
             facing = Vector2.up;
             transform.position = Vector3.zero;

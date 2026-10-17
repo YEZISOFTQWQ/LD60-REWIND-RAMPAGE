@@ -7,7 +7,8 @@ namespace RewindRampage
 {
     public sealed class RewindHud : MonoBehaviour
     {
-        public const string TitleInstructions = "WASD records 3 seconds. SPACE rewinds to attack.\nCross trails for gold nodes. Chain orange enemies.\nSurvive ACT I (90s), then erase your past in ACT II (30s).";
+        public const string TitleInstructions = "WASD records 3 seconds. SPACE rewinds to attack.\nREC: survive. PLAYBACK: erase your recorded self.\nTHE ARCHIVE: break the core and survive to 00:00.";
+        private static readonly string[] ArchivePhases = { "ACT III / THE ARCHIVE / AWAKENING", "ACT III / THE ARCHIVE / THE HUNT", "ACT III / THE ARCHIVE / COLLAPSE" };
         [Serializable]
         public sealed class References
         {
@@ -48,6 +49,7 @@ namespace RewindRampage
             public TextMeshProUGUI duelTitle;
             public TextMeshProUGUI duelDetail;
             public TextMeshProUGUI duelTapeTime;
+            public UnityEngine.UI.Button archiveEntry;
         }
 
         [SerializeField] private References view;
@@ -56,6 +58,7 @@ namespace RewindRampage
         private float noticeRemaining;
         private float uiTime;
         private float damageFlash;
+        private float coreFlash;
         private int previousHealth;
         private int displayedScore = -1;
         private int displayedSeconds = -1;
@@ -72,7 +75,8 @@ namespace RewindRampage
         {
             game = manager;
             view.primary.onClick.AddListener(ActivatePrimary);
-            view.restart.onClick.AddListener(game.StartRun);
+            view.restart.onClick.AddListener(game.SecondaryAction);
+            view.archiveEntry.onClick.AddListener(Act3TestEntry.LoadArchive);
             view.mute.onClick.AddListener(game.ToggleMute);
             previousHealth = game.Player.Health;
         }
@@ -86,11 +90,13 @@ namespace RewindRampage
         {
             bool playing = game.State == SessionState.Playing;
             view.menu.SetActive(!playing);
-            view.restart.gameObject.SetActive(game.State == SessionState.Paused || (game.State == SessionState.Results && game.InDuel && !game.Survived));
-            view.restart.GetComponentInChildren<TextMeshProUGUI>().text = game.InDuel ? "NEW RECORDING" : "RESTART TAPE";
+            view.restart.gameObject.SetActive(game.State == SessionState.Paused || (game.State == SessionState.Results && (game.InArchive || (game.InDuel && !game.Survived))));
+            view.restart.GetComponentInChildren<TextMeshProUGUI>().text = game.InArchive ? game.State == SessionState.Results ? "MAIN MENU" : "RESTART ARCHIVE" : game.InDuel ? "NEW RECORDING" : "RESTART TAPE";
+            view.archiveEntry.gameObject.SetActive(game.State == SessionState.Title);
             if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
             bannerRemaining = noticeRemaining = chainRemaining = 0f;
             damageFlash = 0f;
+            coreFlash = 0f;
             view.notice.text = view.bannerTitle.text = view.bannerDetail.text = string.Empty;
             view.chainLabel.text = string.Empty;
             previousHealth = game.Player.Health;
@@ -101,11 +107,11 @@ namespace RewindRampage
             switch (game.State)
             {
                 case SessionState.Title:
-                    view.menuTag.text = "TAPE 003 / OLD TECH / DEMO v0.3";
+                    view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4";
                     view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
                     view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
                     view.menuInstructions.text = TitleInstructions;
-                    view.menuStats.text = "90s REC / 30s PLAYBACK / 3 LIVES / ONE OLD TAPE";
+                    view.menuStats.text = "3 ACTS / 90s REC / 30s PLAYBACK / 90s ARCHIVE";
                     view.primaryLabel.text = "PLAY TAPE  >  [ SPACE ]";
                     break;
                 case SessionState.Paused:
@@ -117,16 +123,28 @@ namespace RewindRampage
                     view.primaryLabel.text = "RESUME  >  [ ESC ]";
                     break;
                 case SessionState.Results:
+                    if (game.InArchive)
+                    {
+                        view.menuTag.text = game.Survived ? "ARCHIVE ERASED / FINAL TAPE COMPLETE" : "THE ARCHIVE / SUBJECT REJECTED";
+                        view.menuTitle.text = game.Survived ? "TIME\n<color=#FFC242>RELEASED</color>" : "ARCHIVE\n<color=#FF4864>REJECTED</color>";
+                        view.menuLead.text = game.Survived ? "NO MORE ECHOES. NO MORE REWINDS." : game.Player.Health <= 0 ? "YOUR SIGNAL WAS ERASED." : "TIME EXPIRED. THE CORE REMAINS.";
+                        view.menuInstructions.text = game.Survived
+                            ? "Core destroyed. Subject survived until 00:00.\nThe archive collapses into magnetic silence.\nEND OF TAPE."
+                            : "Break the core with three separate rewinds.\nDestroying it does not stop the Echoes or the clock.\nRetry restarts THE ARCHIVE at 01:30.";
+                        view.menuStats.SetText("SURVIVED {0:1}s / ECHOES ERASED {1} / CORE HP {2}/3", game.Elapsed, game.Archive.EchoKills, game.Archive.Core.Health);
+                        view.primaryLabel.text = game.Survived ? "PLAY ARCHIVE AGAIN  >  [ SPACE ]" : "RETRY ARCHIVE  >  [ SPACE ]";
+                        break;
+                    }
                     if (game.InDuel)
                     {
                         view.menuTag.text = game.Survived ? "ACT II COMPLETE / PAST RECORD ERASED" : "TEMPORAL CONFLICT UNRESOLVED";
                         view.menuTitle.text = game.Survived ? "PAST RECORD\n<color=#FFC242>ERASED</color>" : "TEMPORAL\n<color=#FF4864>CONFLICT</color>";
                         view.menuLead.text = game.Survived ? "THE TAPE IS EMPTY. THE SIGNAL REMAINS." : "CURRENT INSTANCE REJECTED";
                         view.menuInstructions.text = game.Survived
-                            ? "Your past self dissolves into magnetic noise.\nSomething is still watching beyond the tape.\nEND OF DEMO / TO BE CONTINUED."
+                            ? "Your past self dissolves into magnetic noise.\nA final archive is waiting beyond the tape.\nEnter ACT III to face the remaining echoes."
                             : "Your recorded self survived the paradox.\nRetry Duel uses the same recording.\nNew Recording starts again from ACT I.";
                         view.menuStats.SetText("DUEL {0:1}s / PAST SELF HP {1} / ACT I SCORE {2:000000}", game.Duel.DuelTime, game.Duel.Boss.Health, game.Score);
-                        view.primaryLabel.text = game.Survived ? "NEW RECORDING  >  [ SPACE ]" : "RETRY DUEL  >  [ SPACE ]";
+                        view.primaryLabel.text = game.Survived ? "ENTER ACT III  >  [ SPACE ]" : "RETRY DUEL  >  [ SPACE ]";
                         break;
                     }
                     view.menuTag.text = game.Survived ? "END OF TAPE / RECORDING SAVED" : "SIGNAL LOST / RECORDING ENDED";
@@ -150,7 +168,7 @@ namespace RewindRampage
                 displayedScore = game.Score;
                 view.score.SetText("{0:000000}", game.Score);
             }
-            float timeLeft = game.InDuel ? game.Duel.Remaining : game.Tuning.roundDuration - game.Elapsed;
+            float timeLeft = game.InArchive ? game.Archive.Remaining : game.InDuel ? game.Duel.Remaining : game.Tuning.roundDuration - game.Elapsed;
             if (game.InDuel && game.Duel.State == GhostDuelState.TransitionIn)
                 timeLeft = game.Tuning.roundDuration * (1f - game.Duel.TransitionProgress);
             int seconds = Mathf.CeilToInt(Mathf.Max(0f, timeLeft));
@@ -160,11 +178,12 @@ namespace RewindRampage
                 view.timer.text = (seconds / 60).ToString("00") + ":" + (seconds % 60).ToString("00");
                 view.timer.color = seconds <= 15 ? GameArt.Red : GameArt.White;
             }
-            int hostileCount = game.InDuel ? game.Duel.Boss.Health : game.EnemyCount;
-            if (hostileCount != displayedEnemies)
+            int hostileCount = game.InArchive ? game.Archive.EchoCount : game.InDuel ? game.Duel.Boss.Health : game.EnemyCount;
+            if (game.InArchive || hostileCount != displayedEnemies)
             {
                 displayedEnemies = hostileCount;
-                if (game.InDuel) view.enemyCount.SetText("PAST SELF HP  {0} / {1}", displayedEnemies, game.Tuning.ghostBossHealth);
+                if (game.InArchive) view.enemyCount.SetText("ECHOES {0}/{1} / REWINDING {2}", displayedEnemies, game.Archive.EchoLimit, game.Archive.AttackingCount);
+                else if (game.InDuel) view.enemyCount.SetText("PAST SELF HP  {0} / {1}", displayedEnemies, game.Tuning.ghostBossHealth);
                 else view.enemyCount.SetText("HOSTILES  {0:00} / {1}", displayedEnemies, game.Tuning.maximumEnemies);
             }
 
@@ -175,12 +194,14 @@ namespace RewindRampage
             damageFlash = Mathf.Max(0f, damageFlash - deltaTime);
             Color flashColor = GameArt.Red;
             flashColor.a = damageFlash * 0.2f;
+            coreFlash = Mathf.Max(0f, coreFlash - deltaTime);
+            if (coreFlash > 0f) flashColor = new Color(0.95f, 0.95f, 1f, coreFlash * 0.65f);
             view.flash.color = flashColor;
 
             bool rewinding = game.Rewind.IsRewinding;
             bool ready = game.Rewind.IsReady;
             bool cooling = game.Rewind.CooldownRemaining > 0f;
-            string mode = game.State == SessionState.Paused ? "II PAUSE" : rewinding ? game.InDuel ? "<< HOLD" : "<< REW" : game.InDuel ? "PLAYBACK" : "REC";
+            string mode = game.State == SessionState.Paused ? "II PAUSE" : rewinding ? game.InDuel ? "<< HOLD" : "<< REW" : game.InArchive ? "ARCHIVE" : game.InDuel ? "PLAYBACK" : "REC";
             if (previousMode != mode) { view.recordState.text = mode; previousMode = mode; }
             view.recordState.color = rewinding ? GameArt.Gold : GameArt.Cyan;
             Color dotColor = rewinding ? GameArt.Gold : GameArt.Red;
@@ -201,7 +222,7 @@ namespace RewindRampage
             for (int i = 0; i < view.reels.Length; i++) view.reels[i].Rotate(0f, 0f, reelSpeed * deltaTime);
 
             int phase = game.Elapsed < 15f ? 0 : game.Elapsed < 25f ? 1 : game.Elapsed < 45f ? 2 : game.Elapsed < 65f ? 3 : 4;
-            if (!game.InDuel && phase != lastPhase)
+            if (!game.InDuel && !game.InArchive && phase != lastPhase)
             {
                 lastPhase = phase;
                 view.phase.text = new[] { "ACT I / REC / LEARN THE TAPE", "ACT I / DOUBLE EXPOSURE", "ACT I / VOLATILE SIGNALS", "ACT I / CHAIN REACTION", "ACT I / FINAL TRANSMISSION" }[phase];
@@ -211,8 +232,13 @@ namespace RewindRampage
                     ShowNotice("VOLATILE SIGNALS ONLINE / ORANGE HEXAGONS EXPLODE ON DEATH.");
             }
             if (game.InDuel) view.phase.SetText("ACT II / PLAYBACK / CLIP {0} OF 3", game.Duel.ClipIndex + 1);
+            if (game.InArchive) view.phase.text = ArchivePhases[game.Archive.Phase];
 
-            string hint = game.InDuel ? rewinding ? "PAST SELF FROZEN / ONE PARADOX HIT PER REWIND." :
+            string hint = game.InArchive ? rewinding ? "ECHOES FROZEN / THE ARCHIVE CLOCK IS STILL RUNNING." : game.Archive.Core.IsDestroyed
+                ? "CORE ERASED / KEEP DODGING. SURVIVE UNTIL 00:00." : game.Archive.Core.State == TimeCoreState.Dormant
+                ? "DODGE LOCKED RED PATHS. THE TIME CORE APPEARS AT 00:30."
+                : "THREE DISTINCT REWINDS TO BREAK THE CORE. THEN SURVIVE UNTIL 00:00."
+                : game.InDuel ? rewinding ? "PAST SELF FROZEN / ONE PARADOX HIT PER REWIND." :
                 "ERASE YOUR PAST / RED DASHES WARN OF ATTACKS. THE FAINT PINK LINE SHOWS ITS NEXT SECOND."
                 : rewinding ? "REWIND / ENEMIES FROZEN. YOU ARE INVULNERABLE." : game.Elapsed < 5f
                 ? "WASD TO RECORD A PATH. LURE THE RED CHASERS BEHIND YOU." : game.Elapsed < 12f && game.RewindCount == 0
@@ -230,7 +256,13 @@ namespace RewindRampage
             float bannerAlpha = Mathf.Clamp01(bannerRemaining * 4f);
             view.bannerTitle.alpha = view.bannerDetail.alpha = bannerAlpha;
             view.muteLabel.text = game.Muted ? "M / SOUND OFF" : "M / SOUND ON";
-            if (game.InDuel)
+            if (game.InArchive)
+            {
+                if (game.Archive.Core.IsDestroyed) view.nodeStatus.SetText("NODES {0} / CORE DESTROYED - SURVIVE", game.GhostNodeCount);
+                else if (game.Archive.Core.State == TimeCoreState.Dormant) view.nodeStatus.SetText("NODES {0} / CORE ONLINE AT 00:30", game.GhostNodeCount);
+                else view.nodeStatus.SetText("NODES {0} / TIME CORE HP {1}/3", game.GhostNodeCount, game.Archive.Core.Health);
+            }
+            else if (game.InDuel)
                 view.nodeStatus.SetText("NODES {0} / REPLAY {1:0.0}s / 1x SPEED", game.GhostNodeCount, game.Duel.ReplayTime);
             else if (game.Tuning.enableGhostNodes && game.Elapsed < game.Tuning.ghostNodeUnlockTime)
                 view.nodeStatus.SetText("DOUBLE EXPOSURE IN {0}s", Mathf.Ceil(game.Tuning.ghostNodeUnlockTime - game.Elapsed));
@@ -249,7 +281,7 @@ namespace RewindRampage
         {
             bool visible = game.InDuel && game.State == SessionState.Playing && game.Duel.IsTransition;
             view.duelOverlay.SetActive(visible);
-            view.scanlines.color = game.InDuel ? new Color(1f, 1f, 1f, 0.35f) : Color.white;
+            view.scanlines.color = game.InDuel || game.InArchive ? new Color(1f, 1f, 1f, 0.35f) : Color.white;
             if (!visible) return;
             GhostDuelState state = game.Duel.State;
             view.duelTitle.text = state == GhostDuelState.TransitionIn ? "END OF TAPE" : state == GhostDuelState.TapeCut ? "TAPE SKIP" : "DUPLICATE SUBJECT DETECTED";
@@ -283,24 +315,45 @@ namespace RewindRampage
             view.chainLabel.color = GameArt.Orange;
         }
 
+        public void ShowCoreImpact(bool destroyed)
+        {
+            coreFlash = destroyed ? 0.65f : 0.4f;
+            ShowBurst(destroyed ? "TIME CORE ERASED" : "CORE FRACTURE",
+                destroyed ? "THE CLOCK IS STILL RUNNING. SURVIVE UNTIL 00:00." : "ONE HIT PER REWIND / KEEP BREAKING THE ARCHIVE.", GameArt.Gold, 1.7f);
+        }
+
         public void SetEnglishPreview()
         {
-            view.menuTag.text = "TAPE 003 / OLD TECH / DEMO v0.3";
+            view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4";
             view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
             view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
             view.menuInstructions.text = TitleInstructions;
-            view.menuStats.text = "90s REC / 30s PLAYBACK / 3 LIVES / ONE OLD TAPE";
+            view.menuStats.text = "3 ACTS / 90s REC / 30s PLAYBACK / 90s ARCHIVE";
             view.instructions.text = "WASD TO RECORD A PATH. LURE THE RED CHASERS BEHIND YOU.";
             view.primaryLabel.text = "PLAY TAPE  >  [ SPACE ]";
             view.notice.text = view.bannerTitle.text = view.bannerDetail.text = view.chainLabel.text = string.Empty;
-            view.nodeStatus.text = "REC / PLAYBACK / DEMO v0.3";
+            view.nodeStatus.text = "REC / PLAYBACK / THE ARCHIVE / DEMO v0.4";
+        }
+
+        public void SetArchivePreview()
+        {
+            SetEnglishPreview();
+            view.menu.SetActive(false);
+            view.archiveEntry.gameObject.SetActive(false);
+            view.phase.text = ArchivePhases[0];
+            view.recordState.text = "ARCHIVE";
+            view.timer.text = "01:30";
+            view.enemyCount.text = "ECHOES 2/2 / REWINDING 0";
+            view.nodeStatus.text = "CORE ONLINE AT 00:30";
+            view.instructions.text = "DODGE LOCKED RED PATHS. BREAK THE CORE, THEN SURVIVE TO 00:00.";
         }
 
         private void OnDestroy()
         {
             if (game == null || view == null) return;
             view.primary.onClick.RemoveListener(ActivatePrimary);
-            view.restart.onClick.RemoveListener(game.StartRun);
+            view.restart.onClick.RemoveListener(game.SecondaryAction);
+            view.archiveEntry.onClick.RemoveListener(Act3TestEntry.LoadArchive);
             view.mute.onClick.RemoveListener(game.ToggleMute);
         }
     }

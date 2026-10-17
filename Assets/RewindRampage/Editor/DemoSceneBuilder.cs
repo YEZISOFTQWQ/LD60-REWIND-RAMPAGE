@@ -18,6 +18,72 @@ namespace RewindRampage.Editor
         private static GameArt art;
         private static GameTuning tuning;
 
+        [MenuItem("Rewind Rampage/Upgrade scene to v0.4 - The Archive")]
+        public static void UpgradeToV04()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before upgrading the scenes.");
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            art = AssetDatabase.LoadAssetAtPath<GameArt>(Root + "/Art/DemoArt.asset");
+            tuning = AssetDatabase.LoadAssetAtPath<GameTuning>(Root + "/Settings/DemoTuning.asset");
+            if (!File.ReadAllText(Root + "/Settings/DemoTuning.asset").Contains("archivePlayerHealth:"))
+            {
+                GameTuning defaults = ScriptableObject.CreateInstance<GameTuning>();
+                SerializedObject source = new SerializedObject(defaults), target = new SerializedObject(tuning);
+                string[] fields = { "archivePlayerHealth", "archiveEchoHealth", "archiveEchoSpeed", "archiveEchoRadius",
+                    "archiveCoreRadius", "archiveSpawnDistance", "archiveSpawnInterval" };
+                foreach (string field in fields) target.CopyFromSerializedProperty(source.FindProperty(field));
+                target.ApplyModifiedPropertiesWithoutUndo();
+                UnityEngine.Object.DestroyImmediate(defaults);
+            }
+            EditorUtility.SetDirty(tuning);
+            const string mainPath = "Assets/Scenes/SampleScene.unity", archivePath = "Assets/Scenes/Act3.unity";
+            Scene main = EditorSceneManager.OpenScene(mainPath, OpenSceneMode.Single);
+            UpgradeArchiveScene(main, GameAct.Rec);
+            EditorSceneManager.SaveScene(main, mainPath);
+            if (!File.Exists(archivePath)) EditorSceneManager.SaveScene(main, archivePath, true);
+            Scene archive = EditorSceneManager.OpenScene(archivePath, OpenSceneMode.Single);
+            UpgradeArchiveScene(archive, GameAct.Archive);
+            EditorSceneManager.SaveScene(archive, archivePath);
+            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(mainPath, true), new EditorBuildSettingsScene(archivePath, true) };
+            PlayerSettings.bundleVersion = "0.4.0";
+            AssetDatabase.SaveAssets();
+            EditorSceneManager.OpenScene(mainPath, OpenSceneMode.Single);
+            Debug.Log("REWIND RAMPAGE v0.4 saved: independent Act3 scene, direct menu entry and development F3. No gameplay tests were run.");
+        }
+
+        private static void UpgradeArchiveScene(Scene scene, GameAct entryAct)
+        {
+            RewindHud hud = null;
+            GameManager manager = null;
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                if (hud == null) hud = root.GetComponentInChildren<RewindHud>(true);
+                if (manager == null) manager = root.GetComponentInChildren<GameManager>(true);
+            }
+            if (hud == null || manager == null) throw new InvalidOperationException("The scene needs its existing HUD and GameManager.");
+            EnsureArchiveEntry(hud);
+            manager.ConfigureEntryAct(entryAct);
+            if (manager.GetComponent<Act3TestEntry>() == null) manager.gameObject.AddComponent<Act3TestEntry>();
+            if (entryAct == GameAct.Archive) hud.SetArchivePreview();
+            else hud.SetEnglishPreview();
+            EditorUtility.SetDirty(hud); EditorUtility.SetDirty(manager);
+        }
+
+        private static void EnsureArchiveEntry(RewindHud hud)
+        {
+            SerializedObject serializedHud = new SerializedObject(hud);
+            SerializedProperty view = serializedHud.FindProperty("view");
+            GameObject menu = (GameObject)view.FindPropertyRelative("menu").objectReferenceValue;
+            Transform panel = menu.transform.Find("Tape case");
+            if (panel == null) throw new InvalidOperationException("The existing tape menu panel is missing.");
+            Transform existing = panel.Find("Test Act III");
+            UnityEngine.UI.Button button = existing != null ? existing.GetComponent<UnityEngine.UI.Button>() :
+                Button("Test Act III", panel, new Vector2(1f, 0f), new Vector2(-56f, 89f), new Vector2(270f, 58f), "TEST ACT III", out _, false);
+            view.FindPropertyRelative("archiveEntry").objectReferenceValue = button;
+            serializedHud.ApplyModifiedPropertiesWithoutUndo();
+            button.gameObject.SetActive(true);
+        }
+
         [MenuItem("Rewind Rampage/Upgrade scene to v0.3")]
         public static void UpgradeToV03()
         {
@@ -49,7 +115,7 @@ namespace RewindRampage.Editor
             EnsureDuelPresentation(hud);
             hud.SetEnglishPreview();
             EditorUtility.SetDirty(hud);
-            PlayerSettings.bundleVersion = "0.3.0";
+            PlayerSettings.bundleVersion = "0.4.0";
             EditorSceneManager.SaveScene(scene, scenePath);
             AssetDatabase.SaveAssets();
             Debug.Log("REWIND RAMPAGE v0.3 upgraded in place; playback duel UI and tuning saved. No gameplay tests were run.");
@@ -105,7 +171,7 @@ namespace RewindRampage.Editor
             if (hud == null) throw new InvalidOperationException("The existing scene has no RewindHud.");
             hud.SetEnglishPreview();
             EditorUtility.SetDirty(hud);
-            PlayerSettings.bundleVersion = "0.3.0";
+            PlayerSettings.bundleVersion = "0.4.0";
             EditorSceneManager.SaveScene(scene, scenePath);
             AssetDatabase.SaveAssets();
             AssetDatabase.ForceReserializeAssets(new[] { Root + "/Settings/DemoTuning.asset" });
@@ -159,7 +225,7 @@ namespace RewindRampage.Editor
             SerializedObject serializedHud = new SerializedObject(hud);
             SerializedProperty view = serializedHud.FindProperty("view");
             TextMeshProUGUI nodeStatus = EnsureLabel("Exposure / volatile status", hud.transform, new Vector2(0.5f, 1f),
-                new Vector2(0f, -122f), new Vector2(510f, 22f), "DOUBLE EXPOSURE / DEMO v0.3", 12f, GameArt.Gold);
+                new Vector2(0f, -122f), new Vector2(510f, 22f), "DOUBLE EXPOSURE / DEMO v0.4", 12f, GameArt.Gold);
             TextMeshProUGUI chainLabel = EnsureLabel("Chain reaction", hud.transform, new Vector2(0.5f, 0.5f),
                 new Vector2(0f, 175f), new Vector2(1000f, 35f), string.Empty, 23f, GameArt.Orange);
             nodeStatus.transform.SetAsFirstSibling();
@@ -169,7 +235,7 @@ namespace RewindRampage.Editor
             serializedHud.ApplyModifiedPropertiesWithoutUndo();
             hud.SetEnglishPreview();
             EditorUtility.SetDirty(hud);
-            PlayerSettings.bundleVersion = "0.3.0";
+            PlayerSettings.bundleVersion = "0.4.0";
             EditorSceneManager.SaveScene(scene, scenePath);
             AssetDatabase.SaveAssets();
             Debug.Log("REWIND RAMPAGE v0.2 scene upgraded in place; English UI, ghost nodes and volatile enemy assets saved.");
@@ -231,6 +297,7 @@ namespace RewindRampage.Editor
             FeedbackController feedback = BuildFeedback();
             RewindHud hud = BuildHud();
             GameManager game = new GameObject("Rewind Rampage - Game").AddComponent<GameManager>();
+            game.gameObject.AddComponent<Act3TestEntry>();
             game.Configure(tuning, art, player, spawner, feedback, hud, camera);
             new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
 
@@ -242,7 +309,9 @@ namespace RewindRampage.Editor
             PlayerSettings.resizableWindow = true;
             const string scenePath = "Assets/Scenes/SampleScene.unity";
             EditorSceneManager.SaveScene(scene, scenePath);
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(scenePath, true) };
+            EditorBuildSettings.scenes = File.Exists("Assets/Scenes/Act3.unity")
+                ? new[] { new EditorBuildSettingsScene(scenePath, true), new EditorBuildSettingsScene("Assets/Scenes/Act3.unity", true) }
+                : new[] { new EditorBuildSettingsScene(scenePath, true) };
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             if (SceneView.lastActiveSceneView != null)
@@ -557,7 +626,7 @@ namespace RewindRampage.Editor
             refs.bannerDetail = Label("Combo detail", parent, new Vector2(0.5f, 0.5f), new Vector2(0f, 216f), new Vector2(1200f, 32f),
                 "", 15f, GameArt.White, TextAlignmentOptions.Center);
             refs.nodeStatus = Label("Exposure / volatile status", parent, new Vector2(0.5f, 1f), new Vector2(0f, -122f), new Vector2(510f, 22f),
-                "DOUBLE EXPOSURE / DEMO v0.3", 12f, GameArt.Gold, TextAlignmentOptions.Center);
+                "DOUBLE EXPOSURE / DEMO v0.4", 12f, GameArt.Gold, TextAlignmentOptions.Center);
             refs.chainLabel = Label("Chain reaction", parent, new Vector2(0.5f, 0.5f), new Vector2(0f, 175f), new Vector2(1000f, 35f),
                 "", 23f, GameArt.Orange, TextAlignmentOptions.Center);
             refs.flash = Box("Damage flash", parent, Vector2.zero, Vector2.zero, Vector2.zero, Color.clear);
@@ -575,6 +644,7 @@ namespace RewindRampage.Editor
             refs.muteLabel = muteLabel;
             hud.Configure(refs);
             EnsureDuelPresentation(hud);
+            EnsureArchiveEntry(hud);
             return hud;
         }
 
@@ -591,7 +661,7 @@ namespace RewindRampage.Editor
             Box("Case top rule", panel, new Vector2(0f, 1f), Vector2.zero, new Vector2(1120f, 2f), new Color(0.13f, 0.29f, 0.34f));
             Box("Case bottom rule", panel, Vector2.zero, Vector2.zero, new Vector2(1120f, 2f), new Color(0.13f, 0.29f, 0.34f));
             refs.menuTag = Label("Menu eyebrow", panel, new Vector2(0f, 1f), new Vector2(56f, -40f), new Vector2(1000f, 28f),
-                "TAPE 003 / OLD TECH / DEMO v0.3", 15f, GameArt.Cyan);
+                "TAPE 004 / OLD TECH / DEMO v0.4", 15f, GameArt.Cyan);
             refs.menuTitle = Label("Menu title", panel, new Vector2(0f, 1f), new Vector2(50f, -102f), new Vector2(750f, 205f),
                 "REWIND\n<color=#FFC242>RAMPAGE</color>", 82f, GameArt.White);
             refs.menuTitle.lineSpacing = -16f;

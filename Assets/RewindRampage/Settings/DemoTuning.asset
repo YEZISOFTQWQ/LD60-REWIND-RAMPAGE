@@ -54,3 +54,10 @@ MonoBehaviour:
   tapeCutDuration: 0.4
   replayWarningLead: 0.5
   replayClipProtection: 0.5
+  archivePlayerHealth: 3
+  archiveEchoHealth: 1
+  archiveEchoSpeed: 2.4
+  archiveEchoRadius: 0.43
+  archiveCoreRadius: 0.95
+  archiveSpawnDistance: 4.5
+  archiveSpawnInterval: 0.9

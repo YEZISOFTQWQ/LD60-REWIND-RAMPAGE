@@ -462,6 +462,13 @@ namespace RewindRampage
             shake = 0.2f;
         }
 
+        public void ArchiveCoreImpact(Vector2 position, bool destroyed)
+        {
+            Burst(position, GameArt.Gold, destroyed ? 80 : 30, destroyed ? 8f : 5f);
+            effectsSource.PlayOneShot(paradoxClip, destroyed ? 0.85f : 0.6f);
+            shake = destroyed ? 0.3f : 0.2f;
+        }
+
         public void SetPaused(bool value)
         {
             paused = value;
