@@ -63,7 +63,7 @@ namespace RewindRampage
         [Min(0.1f)] public float archiveEchoRadius = 0.43f;
         [Min(0.1f)] public float archiveCoreRadius = 0.95f;
         [Min(1f)] public float archiveSpawnDistance = 4.5f;
-        [Min(0.1f)] public float archiveSpawnInterval = 0.9f;
+        [Min(0.1f)] public float archiveSpawnInterval = 0.3f;
 
         public Vector2 ClampToArena(Vector2 position, float radius)
         {

@@ -57,4 +57,4 @@ MonoBehaviour:
   archiveEchoRadius: 0.43
   archiveCoreRadius: 0.95
   archiveSpawnDistance: 4.5
-  archiveSpawnInterval: 0.9
+  archiveSpawnInterval: 0.3

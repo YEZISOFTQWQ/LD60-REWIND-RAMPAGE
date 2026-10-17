@@ -18,6 +18,81 @@ namespace RewindRampage.Editor
         private static GameArt art;
         private static GameTuning tuning;
 
+        [MenuItem("Rewind Rampage/Upgrade scene to v0.4.4 - Phosphor clock HUD")]
+        public static void UpgradeToV044()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before upgrading the scenes.");
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            art = AssetDatabase.LoadAssetAtPath<GameArt>(Root + "/Art/DemoArt.asset");
+            string[] paths = { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/Act3.unity" };
+            foreach (string path in paths)
+            {
+                Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                RewindHud hud = null; Transform arena = null;
+                foreach (GameObject root in scene.GetRootGameObjects())
+                {
+                    if (hud == null) hud = root.GetComponentInChildren<RewindHud>(true);
+                    if (root.name == "Arena - dark signal grid") arena = root.transform;
+                }
+                if (hud == null || arena == null) throw new InvalidOperationException("The existing HUD or arena is missing: " + path);
+                EnsurePhosphorClock(hud, arena, path == paths[1]);
+                EditorSceneManager.SaveScene(scene, path);
+            }
+            tuning = AssetDatabase.LoadAssetAtPath<GameTuning>(Root + "/Settings/DemoTuning.asset");
+            tuning.archiveSpawnInterval = 0.3f;
+            EditorUtility.SetDirty(tuning);
+            PlayerSettings.bundleVersion = "0.4.4";
+            AssetDatabase.SaveAssets();
+            EditorSceneManager.OpenScene(paths[0], OpenSceneMode.Single);
+            Debug.Log("REWIND RAMPAGE v0.4.4 saved: central VHS clock only, three-act lamp rules and denser Archive combat. No gameplay tests were run.");
+        }
+
+        private static void EnsurePhosphorClock(RewindHud hud, Transform arena, bool archive)
+        {
+            Transform clockRoot = arena.Find("Arena clock - underlay");
+            if (clockRoot == null) throw new InvalidOperationException("The existing central clock root is missing.");
+            SerializedObject serializedHud = new SerializedObject(hud);
+            SerializedProperty view = serializedHud.FindProperty("view");
+            ((TMP_Text)view.FindPropertyRelative("timer").objectReferenceValue).gameObject.SetActive(false);
+            ((TMP_Text)view.FindPropertyRelative("timerMilliseconds").objectReferenceValue).gameObject.SetActive(false);
+            Transform existing = clockRoot.Find("Phosphor clock HUD");
+            GameObject item = existing != null ? existing.gameObject : new GameObject("Phosphor clock HUD", typeof(RectTransform), typeof(ArenaClockHud));
+            item.transform.SetParent(clockRoot, false); item.transform.localPosition = Vector3.zero;
+            ((RectTransform)item.transform).sizeDelta = new Vector2(26f, 5f);
+            ArenaClockHud clock = item.GetComponent<ArenaClockHud>();
+            Material material = MaterialAsset("ClockPhosphor", "RewindRampage/ClockPhosphor");
+            material.SetFloat("_GlowFalloff", 8.5f); EditorUtility.SetDirty(material);
+            Material redGlow = ClockLabelGlow("ClockLabel-Record", new Color(1f, 0.17f, 0.13f));
+            Material iceGlow = ClockLabelGlow("ClockLabel-Transport", new Color(0.54f, 0.91f, 1f));
+            Mesh mesh = clock.Author(art, material, redGlow, iceGlow, archive);
+            string meshPath = Root + "/Art/ClockSegments-" + (archive ? "Archive" : "Record") + ".asset";
+            Mesh saved = AssetDatabase.LoadAssetAtPath<Mesh>(meshPath);
+            if (saved == null) { AssetDatabase.CreateAsset(mesh, meshPath); saved = mesh; }
+            else { EditorUtility.CopySerialized(mesh, saved); UnityEngine.Object.DestroyImmediate(mesh); EditorUtility.SetDirty(saved); }
+            clock.UseAuthoredMesh(saved);
+            view.FindPropertyRelative("arenaClock").objectReferenceValue = clock;
+            serializedHud.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(clock); EditorUtility.SetDirty(hud);
+        }
+
+        private static Material ClockLabelGlow(string name, Color color)
+        {
+            string path = Root + "/Art/" + name + ".mat";
+            Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                material = new Material(art.font.material) { name = name };
+                AssetDatabase.CreateAsset(material, path);
+            }
+            material.shader = Shader.Find("TextMeshPro/Distance Field");
+            material.EnableKeyword("GLOW_ON");
+            color.a = 0.7f; material.SetColor("_GlowColor", color);
+            material.SetFloat("_GlowOffset", 0f); material.SetFloat("_GlowInner", 0.08f);
+            material.SetFloat("_GlowOuter", 0.4f); material.SetFloat("_GlowPower", 0.65f);
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
         [MenuItem("Rewind Rampage/Upgrade scene to v0.4.3 - Arena clock and full tape")]
         public static void UpgradeToV043()
         {
@@ -196,6 +271,7 @@ namespace RewindRampage.Editor
             GameObject menu = (GameObject)view.FindPropertyRelative("menu").objectReferenceValue;
             overlay.SetSiblingIndex(menu.transform.GetSiblingIndex()); overlay.gameObject.SetActive(false);
             serializedHud.ApplyModifiedPropertiesWithoutUndo();
+            EnsurePhosphorClock(hud, arena, hud.gameObject.scene.name == "Act3");
         }
 
         [MenuItem("Rewind Rampage/Upgrade scene to v0.4.2 - Act I story")]

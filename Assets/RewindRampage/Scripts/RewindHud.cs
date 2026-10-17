@@ -15,6 +15,7 @@ namespace RewindRampage
             public TextMeshProUGUI score;
             public TMP_Text timer;
             public TMP_Text timerMilliseconds;
+            public ArenaClockHud arenaClock;
             public TextMeshProUGUI recordState;
             public TextMeshProUGUI phase;
             public TextMeshProUGUI enemyCount;
@@ -79,7 +80,6 @@ namespace RewindRampage
         private float coreFlash;
         private int previousHealth;
         private int displayedScore = -1;
-        private int displayedSeconds = -1;
         private int displayedEnemies = -1;
         private int lastPhase = -1;
         private string previousMode;
@@ -87,9 +87,8 @@ namespace RewindRampage
         private string previousAbility;
         private float chainRemaining;
         private float storyRemaining, storyDuration;
-        private Vector2 timerOrigin, modeOrigin;
-        private Vector2 millisecondsOrigin;
-        private float timerWidth, millisecondWidth, timerShift, millisecondsReveal, clockUnit, clockVisibility;
+        private Vector2 modeOrigin;
+        private float clockVisibility, clockBlinkTime;
         private float rewindBlend, rewindVisualClock;
 
         public void Configure(References references) { view = references; }
@@ -102,11 +101,6 @@ namespace RewindRampage
             view.archiveEntry.onClick.AddListener(Act3TestEntry.LoadArchive);
             view.mute.onClick.AddListener(game.ToggleMute);
             view.godMode.onClick.AddListener(game.ToggleInvincibility);
-            timerOrigin = view.timer.rectTransform.anchoredPosition;
-            millisecondsOrigin = view.timerMilliseconds.rectTransform.anchoredPosition;
-            timerWidth = view.timer.GetPreferredValues("00:00").x;
-            millisecondWidth = view.timerMilliseconds.GetPreferredValues(".000").x;
-            clockUnit = view.timer is TextMeshPro ? 0.025f : 1f;
             modeOrigin = view.recordState.rectTransform.anchoredPosition;
             previousHealth = game.Player.Health;
         }
@@ -131,13 +125,13 @@ namespace RewindRampage
             view.chainLabel.text = string.Empty;
             previousHealth = game.Player.Health;
             previousHint = previousMode = previousAbility = null;
-            displayedScore = displayedSeconds = displayedEnemies = -1;
+            displayedScore = displayedEnemies = -1;
             lastPhase = -1;
 
             switch (game.State)
             {
                 case SessionState.Title:
-                    view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4.3";
+                    view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4.4";
                     view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
                     view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
                     view.menuInstructions.text = TitleInstructions;
@@ -334,33 +328,19 @@ namespace RewindRampage
             bool act1Clock = (!game.InDuel && !game.InArchive) || (reconstructing && game.Duel.TransitionElapsed < 6f);
             float time = game.InArchive ? game.Archive.Remaining : game.InDuel ? game.Duel.DuelTime : game.Elapsed;
             if (reconstructing) time = game.Duel.TransitionElapsed < 6f ? game.Tuning.roundDuration : 0f;
-            int totalMilliseconds = (int)Math.Floor(Math.Max(0d, (double)time) * 1000d);
-            int seconds = game.InArchive ? Mathf.CeilToInt(time) : totalMilliseconds / 1000;
-            view.roundTimeLabel.text = game.InArchive ? "TIME LEFT" : "ELAPSED TIME";
-            if (seconds != displayedSeconds)
-            {
-                displayedSeconds = seconds;
-                view.timer.text = (seconds / 60).ToString("00") + ":" + (seconds % 60).ToString("00");
-            }
-            millisecondsReveal = act1Clock ? Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((time - 60f) / 1.1f)) : 0f;
-            timerShift = (millisecondWidth + 8f * clockUnit) * 0.5f * millisecondsReveal;
-            view.timerMilliseconds.SetText(".{0:000}", totalMilliseconds % 1000);
-            float pulse = reconstructing ? 1f : 0.5f + 0.5f * Mathf.Sin((time - 60f) * Mathf.PI * 3f);
-            Color red = Color.Lerp(new Color(0.62f, 0.035f, 0.1f), GameArt.Red, pulse);
-            Color color = game.InArchive ? seconds <= 15 ? GameArt.Red : GameArt.White : Color.Lerp(GameArt.White, red, millisecondsReveal);
+            float alarm = act1Clock ? Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((time - 60f) / 1.1f)) : 1f;
+            float milliseconds = act1Clock ? alarm : 1f;
+            clockBlinkTime += deltaTime;
+            float pulse = 0.5f + 0.5f * Mathf.Sin(clockBlinkTime * Mathf.PI * 3f);
             if (game.State == SessionState.Title) clockVisibility = 0f;
             else clockVisibility = Mathf.MoveTowards(clockVisibility, game.StoryBooting ? 0f : 1f, deltaTime * 3f);
-            color.a = Mathf.Lerp(0.18f, Mathf.Lerp(0.22f, 0.4f, pulse), millisecondsReveal) * clockVisibility;
-            view.timer.color = color;
-            color.a *= millisecondsReveal; view.timerMilliseconds.color = color;
-            ApplyTimerPosition(0f);
-        }
-
-        private void ApplyTimerPosition(float glitch)
-        {
-            view.timer.rectTransform.anchoredPosition = timerOrigin + new Vector2(-timerShift + glitch, 0f);
-            view.timerMilliseconds.rectTransform.anchoredPosition = new Vector2(timerOrigin.x - timerShift + timerWidth * 0.5f + 8f * clockUnit
-                + (1f - millisecondsReveal) * 12f * clockUnit + glitch, millisecondsOrigin.y);
+            bool reverse = game.Rewind.IsRewinding || (reconstructing && game.Duel.TransitionElapsed >= 2f && game.Duel.TransitionElapsed < 5f);
+            bool hold = game.State == SessionState.Paused || game.StoryBooting || (game.InDuel && game.Duel.IsTransition && !reverse);
+            bool active = game.State == SessionState.Playing || game.State == SessionState.Paused;
+            ClockLamps lamps = active ? reverse ? ClockLamps.Rew : game.Act == GameAct.Rec ? ClockLamps.Rec : ClockLamps.Play : ClockLamps.None;
+            if (hold) lamps |= ClockLamps.Pause;
+            bool locked = game.InArchive && game.Archive.Core.State != TimeCoreState.Dormant;
+            view.arenaClock.Display(time, alarm, milliseconds, lamps, locked, clockVisibility, pulse);
         }
 
         private void TickRewindPresentation(float deltaTime, bool reversing)
@@ -455,7 +435,7 @@ namespace RewindRampage
             float shift = glitch > 0f ? Mathf.Sin(uiTime * 107f) * 4f : 0f;
             if (game != null)
             {
-                ApplyTimerPosition(shift * clockUnit);
+                view.arenaClock.SetGlitch(shift * 0.025f);
                 view.recordState.rectTransform.anchoredPosition = modeOrigin + new Vector2(-shift, 0f);
             }
         }
@@ -497,7 +477,7 @@ namespace RewindRampage
 
         public void SetEnglishPreview()
         {
-            view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4.3";
+            view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.4.4";
             view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
             view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
             view.menuInstructions.text = TitleInstructions;
@@ -513,7 +493,7 @@ namespace RewindRampage
             view.godModeLabel.text = "F2 / GOD MODE OFF";
             ClearStoryPresentation();
             view.notice.text = view.bannerTitle.text = view.bannerDetail.text = view.chainLabel.text = string.Empty;
-            view.nodeStatus.text = "REC / PLAYBACK / THE ARCHIVE / DEMO v0.4.3";
+            view.nodeStatus.text = "REC / PLAYBACK / THE ARCHIVE / DEMO v0.4.4";
         }
 
         public void SetArchivePreview()

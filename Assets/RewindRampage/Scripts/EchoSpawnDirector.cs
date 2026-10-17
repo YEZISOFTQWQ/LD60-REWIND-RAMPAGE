@@ -8,7 +8,7 @@ namespace RewindRampage
     {
         private readonly GameTuning tuning;
         private readonly PlayerController player;
-        private readonly List<EchoAIController> echoes = new List<EchoAIController>(4);
+        private readonly List<EchoAIController> echoes = new List<EchoAIController>(EchoPhaseSettings.ForPhase(2).Population);
         private readonly Material warningMaterial;
         private readonly Texture2D warningTexture;
         private EchoPhaseSettings phase;
@@ -34,7 +34,8 @@ namespace RewindRampage
             for (int x = 0; x < 8; x++) warningTexture.SetPixel(x, 0, x < 4 ? Color.white : Color.clear);
             warningTexture.Apply();
             warningMaterial = new Material(art.lineMaterial) { name = "Echo warning material", mainTexture = warningTexture };
-            for (int i = 0; i < 4; i++) echoes.Add(new EchoAIController(i, tuning, art, player, feedback, root, warningMaterial, onPlayerHit));
+            for (int i = 0; i < EchoPhaseSettings.ForPhase(2).Population; i++)
+                echoes.Add(new EchoAIController(i, tuning, art, player, feedback, root, warningMaterial, onPlayerHit));
             reserveCheck = CanReserveAttack;
         }
 

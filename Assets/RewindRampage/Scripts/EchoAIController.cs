@@ -15,9 +15,9 @@ namespace RewindRampage
         { Population = population; AttackSlots = slots; IntervalMin = min; IntervalMax = max; Warning = warning; Rewind = rewind; Recovery = recovery; }
         public static EchoPhaseSettings ForPhase(int phase)
         {
-            if (phase == 0) return new EchoPhaseSettings(2, 1, 3f, 5f, 0.7f, 0.5f, 1f);
-            if (phase == 1) return new EchoPhaseSettings(3, 2, 2f, 4f, 0.6f, 0.45f, 0.8f);
-            return new EchoPhaseSettings(4, 2, 1.5f, 3f, 0.5f, 0.4f, 0.6f);
+            if (phase == 0) return new EchoPhaseSettings(6, 3, 1.4f, 2.2f, 0.7f, 0.5f, 0.55f);
+            if (phase == 1) return new EchoPhaseSettings(10, 5, 0.9f, 1.5f, 0.6f, 0.45f, 0.4f);
+            return new EchoPhaseSettings(14, 7, 0.55f, 1f, 0.5f, 0.4f, 0.3f);
         }
     }
 
