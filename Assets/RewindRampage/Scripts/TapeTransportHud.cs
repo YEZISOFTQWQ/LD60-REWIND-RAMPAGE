@@ -18,7 +18,29 @@ namespace RewindRampage
         private bool locked;
         public const float LampBankStart = 460f, LampGap = 4f;
 
-        public void Configure(TextMeshProUGUI[] labels) { lampLabels = labels; raycastTarget = false; }
+        public static Rect LampCell(float width, int index)
+        {
+            float cellWidth = (width - LampBankStart - LampGap) * 0.5f;
+            return new Rect(LampBankStart + (index % 2) * (cellWidth + LampGap),
+                66f + (1 - index / 2) * 70f, cellWidth, 66f);
+        }
+
+        public void Configure(TextMeshProUGUI[] labels) { lampLabels = labels; raycastTarget = false; LayoutLabels(); }
+        protected override void OnEnable() { base.OnEnable(); LayoutLabels(); }
+        protected override void OnRectTransformDimensionsChange() { base.OnRectTransformDimensionsChange(); LayoutLabels(); }
+
+        private void LayoutLabels()
+        {
+            if (lampLabels == null) return;
+            for (int i = 0; i < lampLabels.Length; i++)
+            {
+                if (lampLabels[i] == null) continue;
+                RectTransform label = lampLabels[i].rectTransform;
+                label.anchorMin = label.anchorMax = Vector2.zero; label.pivot = Vector2.one * 0.5f;
+                label.anchoredPosition = LampCell(rectTransform.rect.width, i).center + new Vector2(18f, 7f);
+                label.sizeDelta = new Vector2(128f, 30f);
+            }
+        }
 
         public void DisplayLamps(ClockLamps value, bool allLocked, float brightness, float visibility)
         {
@@ -75,6 +97,9 @@ namespace RewindRampage
             Rounded(new Rect(middle - 15.4f, 80.6f, 30.8f, 50.8f), 1f, new Color(0.14f, 0.21f, 0.24f));
             Rounded(new Rect(middle - 9f, 89f, 18f, 34f), 1f, accent);
             Rounded(new Rect(middle - 11f, 141f, 22f, 3.5f), 0.5f, reverseMix > 0.1f ? GameArt.Gold : new Color(0.86f, 0.46f, 0.49f));
+            // Readouts have their own rail, outside the four lamp cells.
+            Rounded(new Rect(LampBankStart, 16f, width - LampBankStart, 42f), 2f, Edge);
+            Rounded(new Rect(LampBankStart + 1f, 17f, width - LampBankStart - 2f, 40f), 1f, Well);
             for (int i = 0; i < 4; i++)
             {
                 bool lit = locked || ((int)lamps & (1 << i)) != 0;
@@ -82,41 +107,37 @@ namespace RewindRampage
                 float brightness = locked || i == 1 ? 1f : lampBrightness;
                 Color frame = lit ? Color.Lerp(Edge, tone, 0.25f) : Edge;
                 frame.a = lampVisibility * (lit ? 0.95f : 0.55f);
-                float keyWidth = (width - LampBankStart - 3f * LampGap) / 4f;
-                float x = LampBankStart + i * (keyWidth + LampGap), y = 16f;
-                // Four closely packed hardware keys, with a thin bevel rather than pill corners.
-                Rounded(new Rect(x, y, keyWidth, 186f), 2f, frame);
-                Rounded(new Rect(x + 1.5f, y + 1.5f, keyWidth - 3f, 183f), 1f, Well);
-                Rounded(new Rect(x + 3f, y + 5f, keyWidth - 6f, 178f), 1f,
+                Rect cell = LampCell(width, i);
+                float x = cell.x, y = cell.y, keyWidth = cell.width;
+                // Keep REC/PLAY above REW/PAUSE; all content uses this same cell geometry.
+                Rounded(cell, 2f, frame);
+                Rounded(new Rect(x + 1.5f, y + 1.5f, keyWidth - 3f, cell.height - 3f), 1f, Well);
+                Rounded(new Rect(x + 3f, y + 5f, keyWidth - 6f, cell.height - 8f), 1f,
                     new Color(0.08f, 0.12f, 0.14f, lampVisibility));
-                Rounded(new Rect(x + 6f, y + 180f, keyWidth - 12f, 1f), 0f, frame);
+                Rounded(new Rect(x + 6f, cell.yMax - 6f, keyWidth - 12f, 1f), 0f, frame);
                 Rounded(new Rect(x + 6f, y + 4f, keyWidth - 12f, 3f), 0f,
                     new Color(0.01f, 0.025f, 0.03f, lampVisibility));
-                float center = x + keyWidth * 0.5f;
+                Vector2 symbol = cell.center + new Vector2(-65f, 7f);
                 Color light = tone; light.a = lampVisibility * (lit ? brightness * 0.72f : 0.08f);
-                Rounded(new Rect(x + 18f, 109f, keyWidth - 36f, 3f), 0f, light);
+                Rounded(new Rect(x + 18f, y + 11f, keyWidth - 36f, 3f), 0f, light);
                 if (lit)
                 {
                     light.a *= 0.08f;
-                    Rounded(new Rect(x + 14f, 104f, keyWidth - 28f, 13f), 1f, light);
+                    Rounded(new Rect(x + 14f, y + 6f, keyWidth - 28f, 13f), 1f, light);
                 }
-                if (i == 0 || i == 2)
-                    for (int grip = 0; grip < 3; grip++)
-                        Rounded(new Rect(center - 28f, 42f + grip * 6f, 56f, 1.5f), 0f,
-                            new Color(0.16f, 0.22f, 0.25f, lampVisibility * 0.65f));
                 tone.a = lampVisibility * (lit ? brightness : 0.22f);
                 // Transport symbols match a physical cassette deck.
-                if (i == 0) Disc(new Vector2(center, 171f), 8f, tone);
-                else if (i == 1) Triangle(new Vector2(center - 6f, 162f), new Vector2(center - 6f, 180f), new Vector2(center + 9f, 171f), tone);
+                if (i == 0) Disc(symbol, 8f, tone);
+                else if (i == 1) Triangle(symbol + new Vector2(-6f, -9f), symbol + new Vector2(-6f, 9f), symbol + Vector2.right * 9f, tone);
                 else if (i == 2)
                 {
-                    Triangle(new Vector2(center - 14f, 171f), new Vector2(center - 1f, 180f), new Vector2(center - 1f, 162f), tone);
-                    Triangle(new Vector2(center + 1f, 171f), new Vector2(center + 14f, 180f), new Vector2(center + 14f, 162f), tone);
+                    Triangle(symbol + Vector2.left * 14f, symbol + new Vector2(-1f, 9f), symbol + new Vector2(-1f, -9f), tone);
+                    Triangle(symbol + Vector2.right, symbol + new Vector2(14f, 9f), symbol + new Vector2(14f, -9f), tone);
                 }
                 else
                 {
-                    Rounded(new Rect(center - 9f, 162f, 6f, 18f), 0f, tone);
-                    Rounded(new Rect(center + 3f, 162f, 6f, 18f), 0f, tone);
+                    Rounded(new Rect(symbol.x - 9f, symbol.y - 9f, 6f, 18f), 0f, tone);
+                    Rounded(new Rect(symbol.x + 3f, symbol.y - 9f, 6f, 18f), 0f, tone);
                 }
             }
 

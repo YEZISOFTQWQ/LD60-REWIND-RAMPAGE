@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using TMPro;
 using UnityEditor;
 using UnityEngine;
@@ -11,14 +12,15 @@ namespace RewindRampage.Editor
         // Edit Mode artwork capture only. No GameManager initialization or gameplay simulation.
         public static void UpgradeAndRender()
         {
-            DemoSceneBuilder.UpgradeToV071();
-            Render(1600, 1000, false, "V071-Hud.png");
-            Render(1600, 1000, true, "V071-ReverseHud.png");
-            Render(1280, 720, false, "V071-WideHud.png");
+            DemoSceneBuilder.UpgradeToV072();
+            foreach (Vector2Int size in new[] { new Vector2Int(1600, 1000), new Vector2Int(1280, 720), new Vector2Int(1024, 768) })
+                for (int state = 0; state < 4; state++)
+                    Render(size.x, size.y, state, "V072-" + size.x + "x" + size.y + "-State" + state + ".png");
         }
 
-        private static void Render(int width, int height, bool reverse, string name)
+        private static void Render(int width, int height, int state, string name)
         {
+            bool reverse = state == 1 || state == 2;
             RewindHud source = UnityEngine.Object.FindObjectOfType<RewindHud>(true);
             Camera original = Camera.main;
             if (source == null || original == null) throw new InvalidOperationException("Preview requires the existing HUD and arena camera.");
@@ -52,7 +54,7 @@ namespace RewindRampage.Editor
                 ((CanvasGroup)view.FindPropertyRelative("rewindOverlay").objectReferenceValue).gameObject.SetActive(false);
                 foreach (CanvasGroup fade in clone.GetComponentsInChildren<CanvasGroup>(true)) fade.alpha = 1f;
                 TapeTransportHud transport = (TapeTransportHud)view.FindPropertyRelative("tapeTransport").objectReferenceValue;
-                transport.DisplayLamps(reverse ? ClockLamps.Rew : ClockLamps.Rec | ClockLamps.Play, false, 1f, 1f);
+                transport.DisplayLamps(reverse ? ClockLamps.Rew : ClockLamps.Rec | ClockLamps.Play, state == 3, 1f, 1f);
                 transport.TickMechanism(0.3f, 0.72f, reverse, true, reverse ? 1f : 0f);
                 RewindHud cloneHud = clone.GetComponent<RewindHud>();
                 cloneHud.LayoutTerminal(camera, tuning.arenaHalfSize, width, height);
@@ -64,9 +66,12 @@ namespace RewindRampage.Editor
                     ((UnityEngine.UI.Image)samples.GetArrayElementAtIndex(i).objectReferenceValue).color = i < 22 ? reverse ? GameArt.Gold : GameArt.Cyan : new Color(0.1f, 0.18f, 0.22f);
                 ArenaClockHud clock = UnityEngine.Object.FindObjectOfType<ArenaClockHud>();
                 clock.Display(reverse ? 61.234f : 58f, reverse ? 1f : 0f, reverse ? 1f : 0f, 1f, 1f);
-                ((TextMeshProUGUI)view.FindPropertyRelative("abilityLabel").objectReferenceValue).text = reverse ? "<<< REWINDING / 5x" : "SPACE / REWIND";
-                ((TextMeshProUGUI)view.FindPropertyRelative("tapeTime").objectReferenceValue).text = reverse ? "<< 2.2s / 3.0s" : "2.2s / 3.0s";
+                ((TextMeshProUGUI)view.FindPropertyRelative("abilityLabel").objectReferenceValue).text =
+                    state == 2 ? "<<< RECONSTRUCTING" : state == 3 ? "RECHARGING" : reverse ? "<<< REWINDING / 5x" : "MOVE TO RECORD";
+                ((TextMeshProUGUI)view.FindPropertyRelative("tapeTime").objectReferenceValue).text =
+                    state == 2 ? "<< CAPTURE 30.0s / 30.0s" : state == 3 ? "COOLDOWN 2.0s" : reverse ? "<< 2.2s / 3.0s" : "2.2s / 3.0s";
                 Canvas.ForceUpdateCanvases();
+                ValidateLayout(transport, view, name);
                 foreach (TMP_Text text in clone.GetComponentsInChildren<TMP_Text>(true)) if (text.gameObject.activeInHierarchy) text.ForceMeshUpdate();
                 Canvas.ForceUpdateCanvases();
                 RenderTexture.active = target; GL.Clear(true, true, original.backgroundColor);
@@ -85,6 +90,52 @@ namespace RewindRampage.Editor
                 UnityEngine.Object.DestroyImmediate(uiCameraObject);
                 RenderTexture.ReleaseTemporary(target);
             }
+        }
+
+        private static void ValidateLayout(TapeTransportHud transport, SerializedProperty view, string name)
+        {
+            RectTransform basis = transport.rectTransform;
+            Rect Rail = new Rect(TapeTransportHud.LampBankStart, 16f, basis.rect.width - TapeTransportHud.LampBankStart, 42f);
+            List<Rect> contents = new List<Rect>();
+            Rect LocalBounds(RectTransform rect)
+            {
+                Vector3[] corners = new Vector3[4]; rect.GetWorldCorners(corners);
+                Vector2 low = (Vector2)basis.InverseTransformPoint(corners[0]) - basis.rect.min;
+                Vector2 high = (Vector2)basis.InverseTransformPoint(corners[2]) - basis.rect.min;
+                return Rect.MinMaxRect(low.x, low.y, high.x, high.y);
+            }
+            void Inside(Rect outer, Rect inner, string label)
+            {
+                if (inner.xMin < outer.xMin - 0.1f || inner.xMax > outer.xMax + 0.1f || inner.yMin < outer.yMin - 0.1f || inner.yMax > outer.yMax + 0.1f)
+                    throw new InvalidOperationException(name + ": " + label + " escapes its reserved area.");
+            }
+            for (int i = 0; i < 4; i++)
+            {
+                TMP_Text label = transport.transform.parent.Find("Transport lamp " + i).GetComponent<TMP_Text>();
+                Rect bounds = LocalBounds(label.rectTransform);
+                Inside(TapeTransportHud.LampCell(basis.rect.width, i), bounds, label.name); contents.Add(bounds);
+            }
+            foreach (string field in new[] { "abilityLabel", "tapeTime" })
+            {
+                TMP_Text text = (TMP_Text)view.FindPropertyRelative(field).objectReferenceValue;
+                text.ForceMeshUpdate();
+                if (text.textInfo.lineCount != 1 || text.GetPreferredValues(text.text).x > text.rectTransform.rect.width + 0.1f)
+                    throw new InvalidOperationException(name + ": " + field + " wraps or truncates.");
+                Rect bounds = LocalBounds(text.rectTransform); Inside(Rail, bounds, field); contents.Add(bounds);
+            }
+            SerializedProperty samples = view.FindPropertyRelative("tapeSegments");
+            Rect track = LocalBounds((RectTransform)((UnityEngine.UI.Image)samples.GetArrayElementAtIndex(0).objectReferenceValue).transform.parent);
+            Inside(Rail, track, "buffer bar"); contents.Add(track);
+            SerializedProperty health = view.FindPropertyRelative("health");
+            for (int i = 0; i < health.arraySize; i++)
+            {
+                Rect heart = LocalBounds(((UnityEngine.UI.Image)health.GetArrayElementAtIndex(i).objectReferenceValue).rectTransform);
+                Inside(Rail, heart, "heart " + i); contents.Add(heart);
+            }
+            for (int i = 0; i < contents.Count; i++)
+                for (int j = i + 1; j < contents.Count; j++)
+                    if (contents[i].Overlaps(contents[j])) throw new InvalidOperationException(name + ": bottom HUD regions overlap: " + i + " / " + j);
+            Debug.Log("PASS HUD BOUNDS: " + name + " - 2x2 lamp cells, single-line text, isolated readouts/bar/hearts.");
         }
     }
 }
