@@ -47,7 +47,6 @@ namespace RewindRampage
                 EnemyController enemy = pool[i];
                 if (!enemy.IsAlive || !enemy.IsArmed || hitEnemyIds.Contains(enemy.SpawnId)) continue;
                 if (DistanceSquaredToSegment(enemy.Position, from, to) > radius * radius) continue;
-                hitEnemyIds.Add(enemy.SpawnId);
                 ApplyDamage(enemy, 1, new DamageContext(DamageSource.Trail, RewindId));
             }
         }
@@ -55,6 +54,7 @@ namespace RewindRampage
         public void ApplyDamage(EnemyController enemy, int amount, DamageContext context)
         {
             if (!attackActive || context.RewindId != RewindId) return;
+            if (!enemy.IsAlive || !enemy.IsArmed || amount <= 0 || !hitEnemyIds.Add(enemy.SpawnId)) return;
             enemy.TakeDamage(amount, context);
         }
 

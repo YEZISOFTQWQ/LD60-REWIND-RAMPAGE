@@ -33,10 +33,8 @@ namespace RewindRampage
         [Header("Double exposure")]
         public bool enableGhostNodes = true;
         [Min(0f)] public float ghostNodeUnlockTime = 15f;
-        [Range(1, 8)] public int maximumGhostNodes = 2;
         [Min(0f)] public float minimumCrossingTime = 0.6f;
         [Range(1f, 90f)] public float minimumCrossingAngle = 25f;
-        [Min(0.01f)] public float minimumNodeSpacing = 0.65f;
         [Min(0.01f)] public float ghostNodeRadius = 1.5f;
         [Min(1)] public int ghostNodeDamage = 1;
 

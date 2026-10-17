@@ -42,7 +42,8 @@ namespace RewindRampage
 
         private readonly Fragment[] fragments = new Fragment[160];
         private readonly Popup[] popups = new Popup[20];
-        private readonly Shockwave[] shockwaves = new Shockwave[12];
+        private readonly List<Shockwave> shockwaves = new List<Shockwave>(12);
+        private readonly Stack<Shockwave> freeShockwaves = new Stack<Shockwave>();
         private readonly List<AudioClip> generatedClips = new List<AudioClip>(8);
         private GameArt art;
         private Camera arenaCamera;
@@ -63,7 +64,7 @@ namespace RewindRampage
         private AudioClip explosionClip;
         private int fragmentCursor;
         private int popupCursor;
-        private int waveCursor;
+        private Transform waveRoot;
         private float waveAudioCooldown;
         private float attackFade;
         private float shake;
@@ -136,15 +137,19 @@ namespace RewindRampage
             rewindSource.clip = Synth("Tape motor rewind", 0.6f, 1200f, 160f, 0.52f);
             ambienceSource.clip = MakeHum();
             ambienceSource.Play();
-            Transform waveRoot = new GameObject("Pooled shockwaves").transform;
+            waveRoot = new GameObject("Pooled shockwaves").transform;
             waveRoot.SetParent(transform, false);
-            for (int i = 0; i < shockwaves.Length; i++)
-            {
-                SpriteRenderer ring = CreateWaveSprite("Shockwave ring " + i, waveRoot, art.ring, 16, false);
-                SpriteRenderer glow = CreateWaveSprite("Shockwave glow " + i, waveRoot, art.glow, 14, true);
-                shockwaves[i] = new Shockwave { Ring = ring, Glow = glow };
-            }
+            for (int i = 0; i < 12; i++) CreateShockwave();
             ResetFeedback();
+        }
+
+        private Shockwave CreateShockwave()
+        {
+            SpriteRenderer ring = CreateWaveSprite("Shockwave ring " + shockwaves.Count, waveRoot, art.ring, 16, false);
+            SpriteRenderer glow = CreateWaveSprite("Shockwave glow " + shockwaves.Count, waveRoot, art.glow, 14, true);
+            Shockwave wave = new Shockwave { Ring = ring, Glow = glow };
+            shockwaves.Add(wave);
+            return wave;
         }
 
         private SpriteRenderer CreateWaveSprite(string name, Transform parent, Sprite sprite, int order, bool additive)
@@ -272,7 +277,8 @@ namespace RewindRampage
         // Visual playback is delayed slightly for a readable cascade; damage is already resolved.
         public void ShowExplosion(Vector2 position, float radius, DamageSource source, float delay)
         {
-            Shockwave wave = shockwaves[waveCursor++ % shockwaves.Length];
+            // Grow on demand; a burst never replaces another wave that is still playing.
+            Shockwave wave = freeShockwaves.Count > 0 ? freeShockwaves.Pop() : CreateShockwave();
             wave.Ring.transform.position = wave.Glow.transform.position = position;
             wave.Radius = radius;
             wave.Delay = delay;
@@ -288,7 +294,7 @@ namespace RewindRampage
         {
             waveAudioCooldown = Mathf.Max(0f, waveAudioCooldown - deltaTime);
             if (deltaTime <= 0f) return;
-            for (int i = 0; i < shockwaves.Length; i++)
+            for (int i = 0; i < shockwaves.Count; i++)
             {
                 Shockwave wave = shockwaves[i];
                 if (wave.Remaining <= 0f) continue;
@@ -317,6 +323,7 @@ namespace RewindRampage
                 wave.Ring.color = color;
                 color.a *= 0.2f;
                 wave.Glow.color = color;
+                if (wave.Remaining <= 0f) freeShockwaves.Push(wave);
             }
         }
 
@@ -407,11 +414,13 @@ namespace RewindRampage
                 popups[i].Remaining = 0f;
                 popups[i].Text.gameObject.SetActive(false);
             }
-            for (int i = 0; i < shockwaves.Length; i++)
+            freeShockwaves.Clear();
+            for (int i = 0; i < shockwaves.Count; i++)
             {
                 if (shockwaves[i] == null) continue;
                 shockwaves[i].Remaining = 0f;
                 shockwaves[i].Ring.enabled = shockwaves[i].Glow.enabled = false;
+                freeShockwaves.Push(shockwaves[i]);
             }
         }
 

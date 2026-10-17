@@ -94,7 +94,7 @@ namespace RewindRampage
             switch (game.State)
             {
                 case SessionState.Title:
-                    view.menuTag.text = "TAPE 002 / OLD TECH / DEMO v0.2";
+                    view.menuTag.text = "TAPE 002 / OLD TECH / DEMO v0.2.1";
                     view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
                     view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
                     view.menuInstructions.text = TitleInstructions;
@@ -206,11 +206,10 @@ namespace RewindRampage
             if (game.Tuning.enableGhostNodes && game.Elapsed < game.Tuning.ghostNodeUnlockTime)
                 view.nodeStatus.SetText("DOUBLE EXPOSURE IN {0}s", Mathf.Ceil(game.Tuning.ghostNodeUnlockTime - game.Elapsed));
             else if (game.Tuning.enableVolatileEnemies && game.Elapsed < game.Tuning.volatileUnlockTime)
-                view.nodeStatus.SetText("NODES {0}/{1} / VOLATILES IN {2}s", game.GhostNodeCount, game.Tuning.maximumGhostNodes,
+                view.nodeStatus.SetText("NODES {0} / VOLATILES IN {1}s", game.GhostNodeCount,
                     Mathf.Ceil(game.Tuning.volatileUnlockTime - game.Elapsed));
             else
-                view.nodeStatus.SetText("NODES {0}/{1} / VOLATILES {2}/{3}", game.GhostNodeCount,
-                    game.Tuning.enableGhostNodes ? game.Tuning.maximumGhostNodes : 0, game.VolatileCount,
+                view.nodeStatus.SetText("NODES {0} / VOLATILES {1}/{2}", game.GhostNodeCount, game.VolatileCount,
                     game.Tuning.enableVolatileEnemies ? game.Tuning.maximumVolatileEnemies : 0);
             chainRemaining = Mathf.Max(0f, chainRemaining - deltaTime);
             view.chainLabel.alpha = Mathf.Clamp01(chainRemaining * 4f);
@@ -239,7 +238,7 @@ namespace RewindRampage
 
         public void SetEnglishPreview()
         {
-            view.menuTag.text = "TAPE 002 / OLD TECH / DEMO v0.2";
+            view.menuTag.text = "TAPE 002 / OLD TECH / DEMO v0.2.1";
             view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
             view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
             view.menuInstructions.text = TitleInstructions;
@@ -247,7 +246,7 @@ namespace RewindRampage
             view.instructions.text = "WASD TO RECORD A PATH. LURE THE RED CHASERS BEHIND YOU.";
             view.primaryLabel.text = "PLAY TAPE  >  [ SPACE ]";
             view.notice.text = view.bannerTitle.text = view.bannerDetail.text = view.chainLabel.text = string.Empty;
-            view.nodeStatus.text = "DOUBLE EXPOSURE / DEMO v0.2";
+            view.nodeStatus.text = "DOUBLE EXPOSURE / DEMO v0.2.1";
         }
 
         private void OnDestroy()

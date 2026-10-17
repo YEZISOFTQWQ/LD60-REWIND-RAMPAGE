@@ -18,7 +18,9 @@ namespace RewindRampage
         private readonly TrailDamageSystem damage;
         private readonly FeedbackController feedback;
         private readonly Action onTriggered;
-        private readonly NodeVisual[] visuals;
+        private readonly List<NodeVisual> visuals = new List<NodeVisual>();
+        private readonly GameArt art;
+        private readonly Transform visualRoot;
         private float visualTime;
 
         public GhostNodeController(GameTuning tuning, GameArt art, TrailDamageSystem damage,
@@ -28,20 +30,22 @@ namespace RewindRampage
             this.damage = damage;
             this.feedback = feedback;
             this.onTriggered = onTriggered;
-            visuals = new NodeVisual[tuning.maximumGhostNodes];
-            Transform root = new GameObject("Double Exposure Nodes").transform;
-            root.SetParent(feedback.transform, false);
-            for (int i = 0; i < visuals.Length; i++)
-            {
-                Transform item = new GameObject("Ghost Node " + i).transform;
-                item.SetParent(root, false);
-                SpriteRenderer halo = Sprite(item, "Gold halo", art.glow, 1.25f, 1, new Color(1f, 0.76f, 0.26f, 0.42f));
-                halo.sharedMaterial = art.glowMaterial;
-                SpriteRenderer ring = Sprite(item, "Exposure ring", art.ring, 0.7f, 4, GameArt.Gold);
-                SpriteRenderer core = Sprite(item, "Exposure diamond", art.diamond, 0.31f, 5, GameArt.Gold);
-                visuals[i] = new NodeVisual { Root = item, Ring = ring, Core = core };
-                item.gameObject.SetActive(false);
-            }
+            this.art = art;
+            visualRoot = new GameObject("Double Exposure Nodes").transform;
+            visualRoot.SetParent(feedback.transform, false);
+        }
+
+        private NodeVisual CreateVisual()
+        {
+            Transform item = new GameObject("Ghost Node " + visuals.Count).transform;
+            item.SetParent(visualRoot, false);
+            SpriteRenderer halo = Sprite(item, "Gold halo", art.glow, 1.25f, 1, new Color(1f, 0.76f, 0.26f, 0.42f));
+            halo.sharedMaterial = art.glowMaterial;
+            SpriteRenderer ring = Sprite(item, "Exposure ring", art.ring, 0.7f, 4, GameArt.Gold);
+            SpriteRenderer core = Sprite(item, "Exposure diamond", art.diamond, 0.31f, 5, GameArt.Gold);
+            NodeVisual visual = new NodeVisual { Root = item, Ring = ring, Core = core };
+            visuals.Add(visual);
+            return visual;
         }
 
         private static SpriteRenderer Sprite(Transform parent, string name, UnityEngine.Sprite sprite, float scale, int order, Color color)
@@ -60,16 +64,17 @@ namespace RewindRampage
         {
             visualTime += deltaTime;
             int visualIndex = 0;
-            for (int i = 0; i < nodes.Count && visualIndex < visuals.Length; i++)
+            for (int i = 0; i < nodes.Count; i++)
             {
                 if (!nodes[i].IsActive || nodes[i].HasTriggered) continue;
-                NodeVisual visual = visuals[visualIndex++];
+                NodeVisual visual = visualIndex < visuals.Count ? visuals[visualIndex] : CreateVisual();
+                visualIndex++;
                 visual.Root.gameObject.SetActive(true);
                 visual.Root.position = nodes[i].Position;
                 visual.Ring.transform.localScale = Vector3.one * (0.7f + Mathf.Sin(visualTime * 5f) * 0.07f);
                 visual.Core.transform.localRotation = Quaternion.Euler(0f, 0f, visualTime * 32f);
             }
-            for (int i = visualIndex; i < visuals.Length; i++) visuals[i].Root.gameObject.SetActive(false);
+            for (int i = visualIndex; i < visuals.Count; i++) visuals[i].Root.gameObject.SetActive(false);
         }
 
         public void TriggerNode(GhostNode node)
@@ -83,7 +88,7 @@ namespace RewindRampage
 
         public void ClearAllNodes()
         {
-            for (int i = 0; i < visuals.Length; i++) visuals[i].Root.gameObject.SetActive(false);
+            for (int i = 0; i < visuals.Count; i++) visuals[i].Root.gameObject.SetActive(false);
         }
     }
 }

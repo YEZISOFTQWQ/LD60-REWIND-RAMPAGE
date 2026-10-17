@@ -18,6 +18,33 @@ namespace RewindRampage.Editor
         private static GameArt art;
         private static GameTuning tuning;
 
+        [MenuItem("Rewind Rampage/Upgrade scene to v0.2.1")]
+        public static void UpgradeToV021()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before upgrading the scene.");
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            const string scenePath = "Assets/Scenes/SampleScene.unity";
+            Scene scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+            tuning = AssetDatabase.LoadAssetAtPath<GameTuning>(Root + "/Settings/DemoTuning.asset");
+            if (tuning == null) throw new InvalidOperationException("The existing DemoTuning asset is missing.");
+            // Reserialize the existing asset to remove the obsolete node cap and spacing fields.
+            EditorUtility.SetDirty(tuning);
+            RewindHud hud = null;
+            foreach (GameObject root in scene.GetRootGameObjects())
+            {
+                hud = root.GetComponentInChildren<RewindHud>(true);
+                if (hud != null) break;
+            }
+            if (hud == null) throw new InvalidOperationException("The existing scene has no RewindHud.");
+            hud.SetEnglishPreview();
+            EditorUtility.SetDirty(hud);
+            PlayerSettings.bundleVersion = "0.2.1";
+            EditorSceneManager.SaveScene(scene, scenePath);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.ForceReserializeAssets(new[] { Root + "/Settings/DemoTuning.asset" });
+            Debug.Log("REWIND RAMPAGE v0.2.1 upgraded in place; uncapped nodes and English HUD saved. No gameplay tests were run.");
+        }
+
         [MenuItem("Rewind Rampage/Upgrade scene to v0.2")]
         public static void UpgradeToV02()
         {
@@ -35,8 +62,8 @@ namespace RewindRampage.Editor
                 GameTuning defaults = ScriptableObject.CreateInstance<GameTuning>();
                 SerializedObject source = new SerializedObject(defaults);
                 SerializedObject target = new SerializedObject(tuning);
-                string[] fields = { "enableGhostNodes", "ghostNodeUnlockTime", "maximumGhostNodes", "minimumCrossingTime",
-                    "minimumCrossingAngle", "minimumNodeSpacing", "ghostNodeRadius", "ghostNodeDamage", "enableVolatileEnemies",
+                string[] fields = { "enableGhostNodes", "ghostNodeUnlockTime", "minimumCrossingTime",
+                    "minimumCrossingAngle", "ghostNodeRadius", "ghostNodeDamage", "enableVolatileEnemies",
                     "enableChainExplosions", "volatileUnlockTime", "volatileSpeed", "maximumVolatileEnemies", "initialVolatileChance",
                     "finalVolatileChance", "volatileExplosionRadius", "volatileExplosionDamage" };
                 foreach (string field in fields) target.CopyFromSerializedProperty(source.FindProperty(field));
@@ -65,7 +92,7 @@ namespace RewindRampage.Editor
             SerializedObject serializedHud = new SerializedObject(hud);
             SerializedProperty view = serializedHud.FindProperty("view");
             TextMeshProUGUI nodeStatus = EnsureLabel("Exposure / volatile status", hud.transform, new Vector2(0.5f, 1f),
-                new Vector2(0f, -122f), new Vector2(510f, 22f), "DOUBLE EXPOSURE / DEMO v0.2", 12f, GameArt.Gold);
+                new Vector2(0f, -122f), new Vector2(510f, 22f), "DOUBLE EXPOSURE / DEMO v0.2.1", 12f, GameArt.Gold);
             TextMeshProUGUI chainLabel = EnsureLabel("Chain reaction", hud.transform, new Vector2(0.5f, 0.5f),
                 new Vector2(0f, 175f), new Vector2(1000f, 35f), string.Empty, 23f, GameArt.Orange);
             nodeStatus.transform.SetAsFirstSibling();
@@ -75,7 +102,7 @@ namespace RewindRampage.Editor
             serializedHud.ApplyModifiedPropertiesWithoutUndo();
             hud.SetEnglishPreview();
             EditorUtility.SetDirty(hud);
-            PlayerSettings.bundleVersion = "0.2.0";
+            PlayerSettings.bundleVersion = "0.2.1";
             EditorSceneManager.SaveScene(scene, scenePath);
             AssetDatabase.SaveAssets();
             Debug.Log("REWIND RAMPAGE v0.2 scene upgraded in place; English UI, ghost nodes and volatile enemy assets saved.");
@@ -463,7 +490,7 @@ namespace RewindRampage.Editor
             refs.bannerDetail = Label("Combo detail", parent, new Vector2(0.5f, 0.5f), new Vector2(0f, 216f), new Vector2(1200f, 32f),
                 "", 15f, GameArt.White, TextAlignmentOptions.Center);
             refs.nodeStatus = Label("Exposure / volatile status", parent, new Vector2(0.5f, 1f), new Vector2(0f, -122f), new Vector2(510f, 22f),
-                "DOUBLE EXPOSURE / DEMO v0.2", 12f, GameArt.Gold, TextAlignmentOptions.Center);
+                "DOUBLE EXPOSURE / DEMO v0.2.1", 12f, GameArt.Gold, TextAlignmentOptions.Center);
             refs.chainLabel = Label("Chain reaction", parent, new Vector2(0.5f, 0.5f), new Vector2(0f, 175f), new Vector2(1000f, 35f),
                 "", 23f, GameArt.Orange, TextAlignmentOptions.Center);
             refs.flash = Box("Damage flash", parent, Vector2.zero, Vector2.zero, Vector2.zero, Color.clear);
@@ -496,7 +523,7 @@ namespace RewindRampage.Editor
             Box("Case top rule", panel, new Vector2(0f, 1f), Vector2.zero, new Vector2(1120f, 2f), new Color(0.13f, 0.29f, 0.34f));
             Box("Case bottom rule", panel, Vector2.zero, Vector2.zero, new Vector2(1120f, 2f), new Color(0.13f, 0.29f, 0.34f));
             refs.menuTag = Label("Menu eyebrow", panel, new Vector2(0f, 1f), new Vector2(56f, -40f), new Vector2(1000f, 28f),
-                "TAPE 002 / OLD TECH / DEMO v0.2", 15f, GameArt.Cyan);
+                "TAPE 002 / OLD TECH / DEMO v0.2.1", 15f, GameArt.Cyan);
             refs.menuTitle = Label("Menu title", panel, new Vector2(0f, 1f), new Vector2(50f, -102f), new Vector2(750f, 205f),
                 "REWIND\n<color=#FFC242>RAMPAGE</color>", 82f, GameArt.White);
             refs.menuTitle.lineSpacing = -16f;

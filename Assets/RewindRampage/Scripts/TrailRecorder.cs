@@ -8,11 +8,14 @@ namespace RewindRampage
     {
         public readonly Vector2 Position;
         public readonly float Time;
+        // The incoming segment is identified by its ending sample, never by a list index.
+        public readonly int SampleId;
 
-        public TrailPoint(Vector2 position, float time)
+        public TrailPoint(Vector2 position, float time, int sampleId = 0)
         {
             Position = position;
             Time = time;
+            SampleId = sampleId;
         }
     }
 
@@ -22,6 +25,8 @@ namespace RewindRampage
     {
         private readonly GameTuning tuning;
         private readonly List<TrailPoint> points;
+        private readonly HashSet<int> segmentIds = new HashSet<int>();
+        private int nextSampleId;
         private float nextSample;
         private Vector2 currentPosition;
         private float currentTime;
@@ -44,7 +49,8 @@ namespace RewindRampage
         public void Clear(Vector2 position, float time)
         {
             points.Clear();
-            points.Add(new TrailPoint(position, time));
+            segmentIds.Clear();
+            points.Add(new TrailPoint(position, time, ++nextSampleId));
             currentPosition = position;
             currentTime = time;
             nextSample = time + tuning.sampleInterval;
@@ -56,27 +62,32 @@ namespace RewindRampage
         {
             currentPosition = position;
             currentTime = time;
-            WindowAdvanced?.Invoke(WindowStart);
             float frameDuration = time - previousTime;
             while (nextSample <= time + 0.00001f)
             {
                 float fraction = frameDuration > 0f ? Mathf.Clamp01((nextSample - previousTime) / frameDuration) : 1f;
-                points.Add(new TrailPoint(Vector2.Lerp(previousPosition, position, fraction), Mathf.Min(nextSample, time)));
+                int sampleId = ++nextSampleId;
+                points.Add(new TrailPoint(Vector2.Lerp(previousPosition, position, fraction), Mathf.Min(nextSample, time), sampleId));
+                segmentIds.Add(sampleId);
                 SegmentAdded?.Invoke(points, points.Count - 2);
                 nextSample += tuning.sampleInterval;
             }
 
             float cutoff = time - tuning.recordDuration;
             while (points.Count > 1 && points[1].Time <= cutoff)
+            {
+                segmentIds.Remove(points[1].SampleId);
                 points.RemoveAt(0);
+            }
 
             if (points.Count > 1 && points[0].Time < cutoff)
             {
                 TrailPoint a = points[0];
                 TrailPoint b = points[1];
                 points[0] = new TrailPoint(Vector2.Lerp(a.Position, b.Position,
-                    Mathf.InverseLerp(a.Time, b.Time, cutoff)), cutoff);
+                    Mathf.InverseLerp(a.Time, b.Time, cutoff)), cutoff, a.SampleId);
             }
+            WindowAdvanced?.Invoke(WindowStart);
 
             MovingDuration = 0f;
             for (int i = 1; i < points.Count; i++)
@@ -84,6 +95,8 @@ namespace RewindRampage
             if (points.Count > 0)
                 AccumulateMovement(points[points.Count - 1], new TrailPoint(position, time));
         }
+
+        public bool HasSegment(int segmentId) { return segmentIds.Contains(segmentId); }
 
         private void AccumulateMovement(TrailPoint from, TrailPoint to)
         {

@@ -15,7 +15,8 @@ namespace RewindRampage
         private readonly TrailIntersectionDetector intersections;
         private readonly GhostNodeController nodes;
         private readonly List<TrailPoint> activePath = new List<TrailPoint>(64);
-        private readonly List<GhostNode> activeNodes = new List<GhostNode>(2);
+        private readonly List<GhostNode> activeNodes = new List<GhostNode>();
+        private int nextNodeIndex;
         private int targetIndex;
         private float playbackTime;
         private float cooldownRemaining;
@@ -45,7 +46,10 @@ namespace RewindRampage
             cooldownRemaining = 0f;
             activePath.Clear();
             activeNodes.Clear();
-            intersections.ClearNodes();
+            nextNodeIndex = 0;
+            targetIndex = -1;
+            playbackTime = 0f;
+            recorder.Clear(player.Position, 0f);
             nodes.ClearAllNodes();
             damage.Cancel();
             feedback.StopRewind();
@@ -60,6 +64,7 @@ namespace RewindRampage
             if (activePath.Count < 2) return false;
             damage.Begin();
             intersections.CopyActiveNodes(activeNodes);
+            nextNodeIndex = 0;
             IsRewinding = true;
             playbackTime = activePath[activePath.Count - 1].Time;
             targetIndex = activePath.Count - 2;
@@ -96,7 +101,10 @@ namespace RewindRampage
             cooldownRemaining = tuning.rewindCooldown;
             player.Protect(gameTime, tuning.exitInvulnerability);
             recorder.Clear(player.Position, gameTime);
+            activePath.Clear();
             activeNodes.Clear();
+            nextNodeIndex = 0;
+            targetIndex = -1;
             nodes.ClearAllNodes();
             damage.EndAttack();
             feedback.FinishRewind();
@@ -107,10 +115,12 @@ namespace RewindRampage
         {
             // Split at the LATER crossing timestamp, not by spatial proximity.
             // This preserves event order even across multiple corners/nodes in a single frame.
-            for (int i = 0; i < activeNodes.Count; i++)
+            while (nextNodeIndex < activeNodes.Count)
             {
-                GhostNode node = activeNodes[i];
-                if (!node.IsActive || node.HasTriggered || node.LaterTime > playbackTime + 0.00001f || node.LaterTime < targetTime - 0.00001f) continue;
+                GhostNode node = activeNodes[nextNodeIndex];
+                if (node.LaterTime < targetTime - 0.00001f) break;
+                nextNodeIndex++;
+                if (!node.IsActive || node.HasTriggered || node.LaterTime > playbackTime + 0.00001f) continue;
                 damage.Sweep(player.Position, node.Position);
                 player.SetPosition(node.Position);
                 feedback.AppendAttackPoint(node.Position);
