@@ -11,11 +11,10 @@ namespace RewindRampage.Editor
         // Edit Mode artwork capture only. No GameManager initialization or gameplay simulation.
         public static void UpgradeAndRender()
         {
-            DemoSceneBuilder.UpgradeToV070();
-            Act2Validation.Run();
-            Render(1600, 1000, false, "V070-Hud.png");
-            Render(1600, 1000, true, "V070-ReverseHud.png");
-            Render(1280, 720, false, "V070-WideHud.png");
+            DemoSceneBuilder.UpgradeToV071();
+            Render(1600, 1000, false, "V071-Hud.png");
+            Render(1600, 1000, true, "V071-ReverseHud.png");
+            Render(1280, 720, false, "V071-WideHud.png");
         }
 
         private static void Render(int width, int height, bool reverse, string name)

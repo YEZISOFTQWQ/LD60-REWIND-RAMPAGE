@@ -18,6 +18,26 @@ namespace RewindRampage.Editor
         private static GameArt art;
         private static GameTuning tuning;
 
+        [MenuItem("Rewind Rampage/Upgrade to v0.7.1 - Cassette transport keys")]
+        public static void UpgradeToV071()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before updating the HUD.");
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            art = AssetDatabase.LoadAssetAtPath<GameArt>(Root + "/Art/DemoArt.asset");
+            foreach (string path in new[] { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/Act3.unity" })
+            {
+                Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                RewindHud hud = UnityEngine.Object.FindObjectOfType<RewindHud>(true);
+                if (hud == null) throw new InvalidOperationException("The existing HUD is missing: " + path);
+                EnsureTapeTransport(hud);
+                EditorSceneManager.SaveScene(scene, path);
+            }
+            PlayerSettings.bundleVersion = "0.7.1";
+            AssetDatabase.SaveAssets();
+            EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
+            Debug.Log("v0.7.1 cassette transport keys saved in both scenes. UI only; no gameplay tests.");
+        }
+
         [MenuItem("Rewind Rampage/Upgrade to v0.7.0 - Minimal HUD and Act II")]
         public static void UpgradeToV070()
         {
@@ -78,17 +98,17 @@ namespace RewindRampage.Editor
             {
                 TextMeshProUGUI label = (TextMeshProUGUI)view.FindPropertyRelative(field).objectReferenceValue;
                 label.transform.SetParent(readouts, false);
-                Place(label.rectTransform, new Vector2(0.5f, 0f), point, new Vector2(240f, 22f));
+                Place(label.rectTransform, new Vector2(0.375f, 0f), point, new Vector2(200f, 22f));
                 label.rectTransform.pivot = new Vector2(0f, 0.5f); label.transform.localScale = Vector3.one;
                 label.fontSize = fontSize; label.alignment = TextAlignmentOptions.Midline;
                 return label;
             }
-            Readout("abilityLabel", new Vector2(-120f, 54f), 16f);
-            Readout("tapeTime", new Vector2(-120f, 15f), 13f);
+            Readout("abilityLabel", new Vector2(197f, 72f), 16f);
+            Readout("tapeTime", new Vector2(197f, 37f), 13f);
             SerializedProperty samples = view.FindPropertyRelative("tapeSegments");
             RectTransform track = (RectTransform)((UnityEngine.UI.Image)samples.GetArrayElementAtIndex(0).objectReferenceValue).transform.parent;
             track.SetParent(readouts, false); track.gameObject.SetActive(true);
-            Place(track, new Vector2(0.5f, 0f), new Vector2(-120f, 34f), new Vector2(240f, 3f));
+            Place(track, new Vector2(0.375f, 0f), new Vector2(197f, 50f), new Vector2(200f, 3f));
             track.pivot = new Vector2(0f, 0.5f);
             ((RectTransform)view.FindPropertyRelative("tapeFlowMarker").objectReferenceValue).gameObject.SetActive(false);
             Transform existing = tape.Find("Transport mechanism");
@@ -126,13 +146,18 @@ namespace RewindRampage.Editor
             string[] names = { "REC", "> PLAY", "<< REW", "II PAUSE" };
             TextMeshProUGUI[] lamps = new TextMeshProUGUI[4];
             for (int i = 0; i < lamps.Length; i++)
-                lamps[i] = Caption("Transport lamp " + i, tape, new Vector2(0.5f, 0f), new Vector2(-52f + (i % 2) * 126f, 136f - (i / 2) * 55f), new Vector2(76f, 42f), names[i].Replace("> ", "").Replace("<< ", "").Replace("II ", ""), 18f, TextAlignmentOptions.MidlineLeft);
+            {
+                float anchor = (i + 0.5f) / 4f;
+                float offset = TapeTransportHud.LampBankStart * (1f - anchor) + (i - 1.5f) * TapeTransportHud.LampGap / 4f;
+                lamps[i] = Caption("Transport lamp " + i, tape, new Vector2(anchor, 0f), new Vector2(offset, 135f), new Vector2(160f, 36f), names[i].Replace("> ", "").Replace("<< ", "").Replace("II ", ""), 22f, TextAlignmentOptions.Midline);
+            }
             Sprite heart = Shape("HealthHeart", 6);
             SerializedProperty health = view.FindPropertyRelative("health");
             for (int i = 0; i < health.arraySize; i++)
             {
                 UnityEngine.UI.Image icon = (UnityEngine.UI.Image)health.GetArrayElementAtIndex(i).objectReferenceValue;
-                Place(icon.rectTransform, new Vector2(5f / 6f, 0f), new Vector2(-66f + i * 48f, 102f), Vector2.one * 36f);
+                icon.transform.SetParent(readouts, false);
+                Place(icon.rectTransform, new Vector2(0.875f, 0f), new Vector2(-37f + i * 48f, 36f), Vector2.one * 36f);
                 icon.rectTransform.pivot = Vector2.zero;
                 icon.sprite = heart; icon.color = GameArt.Cyan; icon.preserveAspect = true;
                 UnityEngine.UI.Outline glow = icon.GetComponent<UnityEngine.UI.Outline>();
