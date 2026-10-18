@@ -11,7 +11,7 @@
 <body>
   <main>
     <header>
-      <div class="brand"><span class="mark" aria-hidden="true">&lt;&lt;</span><div><h1>REWIND <span>RAMPAGE</span></h1><p>TAPE 004 / OLD TECH / DEMO v0.7.2</p></div></div>
+      <div class="brand"><span class="mark" aria-hidden="true">&lt;&lt;</span><div><h1>REWIND <span>RAMPAGE</span></h1><p>TAPE 004 / OLD TECH / DEMO v0.9.1</p></div></div>
       <button id="fullscreen" type="button">FULLSCREEN <span aria-hidden="true">↗</span></button>
     </header>
     <section class="player" aria-label="Play REWIND RAMPAGE">
@@ -24,7 +24,8 @@
       <p><kbd>F2</kbd> GOD MODE / OFF BY DEFAULT. Press again to disable.</p>
       <p>ACT I / RECORD. The centered arena clock turns red and reveals milliseconds after 01:00. The tape reels reverse when you rewind.</p>
       <p>ACT II / Replay the final 30 seconds of your REC run at 1x speed. Follow the purple two-second preview, dodge intermittent fire, and erase the ghost with one rewind hit. Its recorded attacks are harmless.</p>
-      <p>ACT III / THE ARCHIVE. Break the core after 00:30, then survive until 00:00. Select TEST ACT III in the title menu to jump straight in.</p>
+      <p>ACT III / THE ARCHIVE. Break the core after 00:30, then survive until 00:00.</p>
+      <p>ENDLESS MODE / Clear the story to unlock, or press <kbd>F4</kbd> for testing. Survive BULLET STORM, rewind DETONATION, then learn four field mechanics in MECHANIC RUSH. In P2/P3, rewinding also reverses the phase clock, field mechanics and visual replay. P4 / MAGNETIC IMPACT, P5 / CORRUPTED SECTORS and P6 / INTERFERENCE MATRIX share one invulnerable MASTER TAPE. Read ordered sector waves, persistent overwrite strips and moving sweep gaps. Boss RTA and all mechanisms rewind together, including across phases. P7 / FINAL OVERWRITE combines the learned fields, then MEMORY LOCK forces your real history backward. Remember the two sector waves: the second pass has no advance warning. Clear P7 to continue into the next P4 loop with the same Boss and reversible RTA.</p>
       <p>Your past is your weapon.<span class="credit">BY YEZISOFTQWQ</span></p>
     </footer>
   </main>
@@ -41,7 +42,7 @@
     }
     canvas.addEventListener('pointerdown', () => canvas.focus());
     canvas.addEventListener('keydown', event => {
-      if (['Space', 'F3', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
+      if (['Space', 'F4', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
     });
     fullscreen.addEventListener('click', () => {
       if (playerInstance) { playerInstance.SetFullscreen(1); canvas.focus(); }
@@ -60,7 +61,7 @@
           streamingAssetsUrl: 'StreamingAssets',
           companyName: 'Tape Lab',
           productName: 'REWIND RAMPAGE',
-          productVersion: '0.7.2',
+          productVersion: '0.9.1',
           showBanner: (message, type) => { if (type === 'error') showError(message); }
         }, progress => {
           document.querySelector('#progress-fill').style.width = `${Math.round(progress * 100)}%`;
