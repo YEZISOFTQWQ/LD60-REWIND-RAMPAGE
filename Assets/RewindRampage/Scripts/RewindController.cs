@@ -21,10 +21,12 @@ namespace RewindRampage
         private float playbackTime;
         private float cooldownRemaining;
         private float stepClockStart, stepClockEnd, stepPlaybackStart, lastSweepClock;
+        private float forcedTapeBudget;
 
         public event Action<Vector2, Vector2, float, int> SegmentTraversed;
         public event Action<GhostNode, float, int> NodeBurst;
         public event Action<Vector2, float, bool> PositionObserved;
+        public event Action<float> HistoryRewound;
 
         public bool IsRewinding { get; private set; }
         public float RemainingTapeDuration => IsRewinding && activePath.Count > 1 ? Mathf.Max(0f, playbackTime - activePath[0].Time) : 0f;
@@ -65,6 +67,23 @@ namespace RewindRampage
 
         public void TickCooldown(float deltaTime) { cooldownRemaining = Mathf.Max(0f, cooldownRemaining - deltaTime); }
 
+        public void SuspendForBossForce(MemoryLockAttempt memory)
+        {
+            if (IsRewinding) throw new InvalidOperationException("Boss force cannot interrupt an active player attack.");
+            forcedTapeBudget = recorder.Duration;
+            List<TrailPoint> path = new List<TrailPoint>();
+            foreach (ReplayFrame frame in memory.PlayerHistory.Frames)
+                if (frame.Time >= memory.Target) path.Add(new TrailPoint(frame.Position, frame.Time));
+            feedback.BeginRewind(path, true);
+        }
+        public void ResumeAfterBossForce(MemoryLockAttempt memory, float gameClock)
+        {
+            // Cooldown and HP are deliberately untouched. Rebuild nodes through the same
+            // tape events, with at most the ordinary capacity that existed before capture.
+            recorder.RebaseHistoricalPrefix(memory.PlayerHistory, memory.Target, gameClock, forcedTapeBudget);
+            feedback.EndForcedRewind();
+        }
+
         public bool TryStart(float gameTime)
         {
             if (!IsReady) return false;
@@ -92,6 +111,8 @@ namespace RewindRampage
             stepClockEnd = gameTime;
             stepPlaybackStart = playbackTime;
             float nextTime = Mathf.Max(activePath[0].Time, playbackTime - deltaTime * tuning.rewindMultiplier);
+            // Report actual historical tape travel, including clipped/short final slices.
+            HistoryRewound?.Invoke(Mathf.Max(0f, playbackTime - nextTime));
 
             // Visit EVERY crossed sample, even if a low frame rate spans several corners.
             // Sweeping directly to the final endpoint would cut across the recorded route.

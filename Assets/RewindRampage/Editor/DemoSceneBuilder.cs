@@ -18,6 +18,177 @@ namespace RewindRampage.Editor
         private static GameArt art;
         private static GameTuning tuning;
 
+        [MenuItem("Rewind Rampage/Upgrade to v0.8.6 - Rewind combo HUD")]
+        public static void UpgradeToV086()
+        {
+            UpgradeToV085();
+            art = AssetDatabase.LoadAssetAtPath<GameArt>(Root + "/Art/DemoArt.asset");
+            GameTuning sceneTuning = AssetDatabase.LoadAssetAtPath<GameTuning>(Root + "/Settings/DemoTuning.asset");
+            foreach (string path in new[] { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/Act3.unity" })
+            {
+                Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                RewindHud hud = UnityEngine.Object.FindObjectOfType<RewindHud>(true);
+                SerializedObject data = new SerializedObject(hud);
+                SerializedProperty references = data.FindProperty("view");
+                TextMeshProUGUI combo = EnsureLabel("Rewind attack combo", hud.transform, Vector2.one,
+                    new Vector2(-40f, -150f), new Vector2(360f, 48f), string.Empty, 32f, GameArt.Gold);
+                combo.gameObject.SetActive(true); combo.alignment = TextAlignmentOptions.TopRight;
+                combo.enableWordWrapping = false; combo.raycastTarget = false; combo.alpha = 0f;
+                references.FindPropertyRelative("rewindCombo").objectReferenceValue = combo;
+                ((TextMeshProUGUI)references.FindPropertyRelative("menuTag").objectReferenceValue).text = "TAPE 004 / OLD TECH / DEMO v0.8.6";
+                data.ApplyModifiedPropertiesWithoutUndo();
+                GameManager.LayoutArenaCamera(Camera.main, sceneTuning, 1600, 1000);
+                hud.LayoutTerminal(Camera.main, sceneTuning.arenaHalfSize, 1600, 1000);
+                EditorUtility.SetDirty(hud); EditorSceneManager.SaveScene(scene, path);
+            }
+            PlayerSettings.bundleVersion = "0.8.6"; AssetDatabase.SaveAssets();
+            EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
+            Debug.Log("v0.8.6: independent per-rewind hit combo, refreshed on accepted player hits and hidden after 2s. Slower P5 overwrite retained.");
+        }
+
+        [MenuItem("Rewind Rampage/Upgrade to v0.8.5 - Slower overwrite")]
+        public static void UpgradeToV085()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before updating settings.");
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            EndlessSettings endless = AssetDatabase.LoadAssetAtPath<EndlessSettings>(Root + "/Settings/EndlessTuning.asset");
+            endless.overwriteAdvanceInterval = 1.2f;
+            endless.overwriteDangerHoldSeconds = 0.4f;
+            endless.p5CombinedOverwriteStartOffset = 1.5f;
+            EditorUtility.SetDirty(endless);
+            foreach (string path in new[] { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/Act3.unity" })
+            {
+                Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                RewindHud hud = UnityEngine.Object.FindObjectOfType<RewindHud>(true);
+                SerializedObject data = new SerializedObject(hud);
+                ((TextMeshProUGUI)data.FindProperty("view").FindPropertyRelative("menuTag").objectReferenceValue).text = "TAPE 004 / OLD TECH / DEMO v0.8.5";
+                EditorUtility.SetDirty(hud); EditorSceneManager.SaveScene(scene, path);
+            }
+            PlayerSettings.bundleVersion = "0.8.5"; AssetDatabase.SaveAssets();
+            EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
+            Debug.Log("v0.8.5: OVERWRITE interval 1.2s, hold 0.4s, combination offset 1.5s. Other attacks and earlier phases unchanged.");
+        }
+
+        [MenuItem("Rewind Rampage/Upgrade to v0.8.4 - Extended Boss P4-P6")]
+        public static void UpgradeToV084()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before updating settings.");
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            EndlessSettings endless = AssetDatabase.LoadAssetAtPath<EndlessSettings>(Root + "/Settings/EndlessTuning.asset");
+            endless.p4CombinedPasses = endless.p5CombinedPasses = endless.p6CombinedPasses = 3;
+            EditorUtility.SetDirty(endless);
+            foreach (string path in new[] { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/Act3.unity" })
+            {
+                Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                RewindHud hud = UnityEngine.Object.FindObjectOfType<RewindHud>(true);
+                SerializedObject data = new SerializedObject(hud);
+                ((TextMeshProUGUI)data.FindProperty("view").FindPropertyRelative("menuTag").objectReferenceValue).text = "TAPE 004 / OLD TECH / DEMO v0.8.4";
+                EditorUtility.SetDirty(hud); EditorSceneManager.SaveScene(scene, path);
+            }
+            PlayerSettings.bundleVersion = "0.8.4"; AssetDatabase.SaveAssets();
+            EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
+            Debug.Log("v0.8.4: five rounds per Boss phase. Only P4-P6 sequence length changed; story and P1-P3 tuning preserved.");
+        }
+
+        [MenuItem("Rewind Rampage/Upgrade to v0.8.3 - Boss P4-P6")]
+        public static void UpgradeToV083()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before updating settings.");
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            EndlessSettings endless = AssetDatabase.LoadAssetAtPath<EndlessSettings>(Root + "/Settings/EndlessTuning.asset");
+            endless.p4TrackLockFollowSeconds = 0.9f; endless.p4TrackLockRadius = 2.2f;
+            endless.p4TrackLockDamageWindow = 0.3f; endless.p4MechanicRecoverySeconds = 0.3f;
+            endless.p4HeadSweepWarnSeconds = 1.4f; endless.p4HeadSweepTravelSeconds = 2.6f;
+            endless.combinedHeadSweepDelayAfterTrackLock = 0.1f; endless.combinedOverlapSeconds = 0.3f;
+            EditorUtility.SetDirty(endless);
+            foreach (string path in new[] { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/Act3.unity" })
+            {
+                Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                RewindHud hud = UnityEngine.Object.FindObjectOfType<RewindHud>(true);
+                SerializedObject data = new SerializedObject(hud);
+                ((TextMeshProUGUI)data.FindProperty("view").FindPropertyRelative("menuTag").objectReferenceValue).text = "TAPE 004 / OLD TECH / DEMO v0.8.3";
+                EditorUtility.SetDirty(hud); EditorSceneManager.SaveScene(scene, path);
+            }
+            PlayerSettings.bundleVersion = "0.8.3"; AssetDatabase.SaveAssets();
+            EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
+            Debug.Log("v0.8.3: Boss P4 v1.1 / P5 / P6 tuning saved using Editor APIs. P1-P3 and story tuning preserved.");
+        }
+
+        [MenuItem("Rewind Rampage/Upgrade to v0.8.2 - Magnetic Impact")]
+        public static void UpgradeToV082()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before updating settings.");
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            EndlessSettings endless = AssetDatabase.LoadAssetAtPath<EndlessSettings>(Root + "/Settings/EndlessTuning.asset");
+            // New serialized P4 fields retain their declared defaults. Do not retune P1-P3 or the story.
+            EditorUtility.SetDirty(endless);
+            foreach (string path in new[] { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/Act3.unity" })
+            {
+                Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                RewindHud hud = UnityEngine.Object.FindObjectOfType<RewindHud>(true);
+                SerializedObject data = new SerializedObject(hud);
+                ((TextMeshProUGUI)data.FindProperty("view").FindPropertyRelative("menuTag").objectReferenceValue).text = "TAPE 004 / OLD TECH / DEMO v0.8.2";
+                EditorUtility.SetDirty(hud); EditorSceneManager.SaveScene(scene, path);
+            }
+            PlayerSettings.bundleVersion = "0.8.2"; AssetDatabase.SaveAssets();
+            EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
+            Debug.Log("v0.8.2: P4 parameters and version tags saved through Editor APIs; story and P1-P3 tuning preserved.");
+        }
+
+        [MenuItem("Rewind Rampage/Upgrade to v0.8.1 - Reversible phases")]
+        public static void UpgradeToV081()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before updating settings.");
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            EndlessSettings endless = AssetDatabase.LoadAssetAtPath<EndlessSettings>(Root + "/Settings/EndlessTuning.asset");
+            endless.p1SpawnInterval = 0.55f; endless.p1OpeningSpawnInterval = 0.95f; endless.p1GatherDuration = 2.5f;
+            endless.p1TrackerSpeed = 2.8f; endless.p1SpawnWarning = 0.65f; endless.p3TrackerSpawnInterval = 6f;
+            endless.trackLockWarning = endless.badSectorsWarning = endless.overwriteWarning = 1.8f; endless.headSweepWarning = 2f;
+            endless.warningFillAlpha = 0.16f; endless.attackFillAlpha = 0.28f; endless.boundaryWidth = 0.055f;
+            EditorUtility.SetDirty(endless);
+            GameTuning story = AssetDatabase.LoadAssetAtPath<GameTuning>(Root + "/Settings/DemoTuning.asset");
+            story.storyPlaybackSpeed = 0.65f; EditorUtility.SetDirty(story);
+            foreach (string path in new[] { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/Act3.unity" })
+            {
+                Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                RewindHud hud = UnityEngine.Object.FindObjectOfType<RewindHud>(true);
+                SerializedObject data = new SerializedObject(hud);
+                ((TextMeshProUGUI)data.FindProperty("view").FindPropertyRelative("menuTag").objectReferenceValue).text = "TAPE 004 / OLD TECH / DEMO v0.8.1";
+                EditorUtility.SetDirty(hud); EditorSceneManager.SaveScene(scene, path);
+            }
+            PlayerSettings.bundleVersion = "0.8.1"; AssetDatabase.SaveAssets();
+            EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
+            Debug.Log("v0.8.1 migrated through Editor APIs; story combat tuning preserved except the requested two-hit core and slower presentation.");
+        }
+
+        [MenuItem("Rewind Rampage/Upgrade to v0.8.0 - Locked endless entry")]
+        public static void UpgradeToV080()
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play Mode before updating the menu.");
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            art = AssetDatabase.LoadAssetAtPath<GameArt>(Root + "/Art/DemoArt.asset");
+            EndlessSettings endless = AssetDatabase.LoadAssetAtPath<EndlessSettings>(Root + "/Settings/EndlessTuning.asset");
+            if (endless == null) { endless = ScriptableObject.CreateInstance<EndlessSettings>(); AssetDatabase.CreateAsset(endless, Root + "/Settings/EndlessTuning.asset"); }
+            foreach (string path in new[] { "Assets/Scenes/SampleScene.unity", "Assets/Scenes/Act3.unity" })
+            {
+                Scene scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
+                RewindHud hud = UnityEngine.Object.FindObjectOfType<RewindHud>(true);
+                EnsureEndlessEntry(hud);
+                GameManager manager = UnityEngine.Object.FindObjectOfType<GameManager>(true);
+                SerializedObject gameData = new SerializedObject(manager);
+                gameData.FindProperty("endlessSettings").objectReferenceValue = endless; gameData.ApplyModifiedPropertiesWithoutUndo(); EditorUtility.SetDirty(manager);
+                foreach (Act3TestEntry oldShortcut in UnityEngine.Object.FindObjectsOfType<Act3TestEntry>(true))
+                    UnityEngine.Object.DestroyImmediate(oldShortcut);
+                SerializedObject data = new SerializedObject(hud);
+                ((TextMeshProUGUI)data.FindProperty("view").FindPropertyRelative("menuTag").objectReferenceValue).text = "TAPE 004 / OLD TECH / DEMO v0.8.0";
+                EditorUtility.SetDirty(hud);
+                EditorSceneManager.SaveScene(scene, path);
+            }
+            PlayerSettings.bundleVersion = "0.8.0"; AssetDatabase.SaveAssets();
+            EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity", OpenSceneMode.Single);
+            Debug.Log("v0.8.0 locked endless menu saved. No gameplay tuning was modified.");
+        }
+
         [MenuItem("Rewind Rampage/Upgrade to v0.7.2 - Transport matrix layout")]
         public static void UpgradeToV072()
         {
@@ -700,7 +871,7 @@ namespace RewindRampage.Editor
                 if (manager == null) manager = root.GetComponentInChildren<GameManager>(true);
             }
             if (hud == null || manager == null) throw new InvalidOperationException("The scene needs its existing HUD and GameManager.");
-            EnsureArchiveEntry(hud);
+            EnsureEndlessEntry(hud);
             manager.ConfigureEntryAct(entryAct);
             if (manager.GetComponent<Act3TestEntry>() == null) manager.gameObject.AddComponent<Act3TestEntry>();
             if (entryAct == GameAct.Archive) hud.SetArchivePreview();
@@ -708,19 +879,32 @@ namespace RewindRampage.Editor
             EditorUtility.SetDirty(hud); EditorUtility.SetDirty(manager);
         }
 
-        private static void EnsureArchiveEntry(RewindHud hud)
+        private static void EnsureEndlessEntry(RewindHud hud)
         {
             SerializedObject serializedHud = new SerializedObject(hud);
             SerializedProperty view = serializedHud.FindProperty("view");
             GameObject menu = (GameObject)view.FindPropertyRelative("menu").objectReferenceValue;
             Transform panel = menu.transform.Find("Tape case");
             if (panel == null) throw new InvalidOperationException("The existing tape menu panel is missing.");
-            Transform existing = panel.Find("Test Act III");
-            UnityEngine.UI.Button button = existing != null ? existing.GetComponent<UnityEngine.UI.Button>() :
-                Button("Test Act III", panel, new Vector2(1f, 0f), new Vector2(-56f, 89f), new Vector2(270f, 58f), "TEST ACT III", out _, false);
-            view.FindPropertyRelative("archiveEntry").objectReferenceValue = button;
+            UnityEngine.UI.Button button = (UnityEngine.UI.Button)view.FindPropertyRelative("endlessEntry").objectReferenceValue;
+            if (button == null)
+            {
+                Transform existing = panel.Find("Test Act III");
+                button = existing != null ? existing.GetComponent<UnityEngine.UI.Button>() :
+                    Button("Endless mode", panel, new Vector2(1f, 0f), new Vector2(-56f, 89f), new Vector2(270f, 58f), "ENDLESS MODE", out _, false);
+            }
+            button.name = "Endless mode";
+            view.FindPropertyRelative("endlessEntry").objectReferenceValue = button;
             serializedHud.ApplyModifiedPropertiesWithoutUndo();
-            button.gameObject.SetActive(true);
+            button.gameObject.SetActive(true); button.interactable = false;
+            for (int i = button.onClick.GetPersistentEventCount() - 1; i >= 0; i--)
+                UnityEditor.Events.UnityEventTools.RemovePersistentListener(button.onClick, i);
+            UnityEngine.UI.ColorBlock colors = button.colors;
+            colors.disabledColor = new Color(0.10f, 0.15f, 0.17f); button.colors = colors;
+            TextMeshProUGUI label = button.GetComponentInChildren<TextMeshProUGUI>(true);
+            label.text = "ENDLESS MODE\nCLEAR STORY TO UNLOCK"; label.fontSize = 14f;
+            label.enableWordWrapping = false; label.color = GameArt.Muted;
+            EditorUtility.SetDirty(button); EditorUtility.SetDirty(label);
         }
 
         [MenuItem("Rewind Rampage/Upgrade scene to v0.3")]
@@ -1270,6 +1454,9 @@ namespace RewindRampage.Editor
                 "", 40f, GameArt.Gold, TextAlignmentOptions.Center);
             refs.bannerDetail = Label("Combo detail", parent, new Vector2(0.5f, 0.5f), new Vector2(0f, 216f), new Vector2(1200f, 32f),
                 "", 15f, GameArt.White, TextAlignmentOptions.Center);
+            refs.rewindCombo = Label("Rewind attack combo", parent, Vector2.one, new Vector2(-40f, -150f), new Vector2(360f, 48f),
+                "", 32f, GameArt.Gold, TextAlignmentOptions.TopRight);
+            refs.rewindCombo.alpha = 0f;
             refs.nodeStatus = Label("Exposure / volatile status", parent, new Vector2(0.5f, 1f), new Vector2(0f, -122f), new Vector2(510f, 22f),
                 "DOUBLE EXPOSURE / DEMO v0.4.3", 12f, GameArt.Gold, TextAlignmentOptions.Center);
             refs.chainLabel = Label("Chain reaction", parent, new Vector2(0.5f, 0.5f), new Vector2(0f, 175f), new Vector2(1000f, 35f),
@@ -1289,7 +1476,7 @@ namespace RewindRampage.Editor
             refs.muteLabel = muteLabel;
             hud.Configure(refs);
             EnsureDuelPresentation(hud);
-            EnsureArchiveEntry(hud);
+            EnsureEndlessEntry(hud);
             EnsureStoryPresentation(hud);
             return hud;
         }

@@ -10,6 +10,13 @@ namespace RewindRampage
         [SerializeField] private LineRenderer historyGlow;
         [SerializeField] private LineRenderer attack;
         [SerializeField] private LineRenderer attackGlow;
+        [Header("Main-story music / loop at the original tempo")]
+        [SerializeField] private AudioClip act1Music;
+        [SerializeField] private AudioClip act2Music;
+        [SerializeField] private AudioClip act3Music;
+        [SerializeField] private AudioClip settlementMusic;
+        [SerializeField] private AudioClip menuMusic;
+        [SerializeField, Range(0f, 1f)] private float musicVolume = 0.55f;
 
         private sealed class Fragment
         {
@@ -48,12 +55,15 @@ namespace RewindRampage
         private GameArt art;
         private Camera arenaCamera;
         private Vector3 cameraOrigin;
+        public Vector2 CameraShakeOffset => arenaCamera != null ? (Vector2)(arenaCamera.transform.position - cameraOrigin) : Vector2.zero;
         private Gradient normalGradient;
         private Gradient rewindGradient;
         private AudioSource effectsSource;
         private AudioSource rewindSource;
         private AudioSource ambienceSource;
         private AudioSource burstSource;
+        private AudioSource musicSource;
+        private bool settlementMusicPlayed;
         private AudioClip killClip;
         private AudioClip hurtClip;
         private AudioClip deniedClip;
@@ -73,6 +83,7 @@ namespace RewindRampage
         private bool paused;
         private SpriteRenderer rewindHead, rewindHeadGlow;
         private float rewindVisualTime;
+        private bool forcedRewindVisual;
         private const float RewindFadeDuration = 0.55f;
 
         public bool Muted { get; private set; }
@@ -136,6 +147,9 @@ namespace RewindRampage
             rewindSource = CreateSource(true, 0.38f);
             ambienceSource = CreateSource(true, 0.08f);
             burstSource = CreateSource(false, 0.6f);
+            musicSource = CreateSource(false, musicVolume);
+            musicSource.priority = 32;
+            musicSource.mute = Muted;
             killClip = Synth("Signal hit", 0.16f, 650f, 180f, 0.16f);
             hurtClip = Synth("Signal damaged", 0.3f, 150f, 42f, 0.45f);
             deniedClip = Synth("Tape unavailable", 0.075f, 110f, 95f, 0.08f);
@@ -200,14 +214,21 @@ namespace RewindRampage
             historyGlow.SetPosition(index, position);
         }
 
-        public void BeginRewind(IReadOnlyList<TrailPoint> path)
+        public void BeginRewind(IReadOnlyList<TrailPoint> path, bool forced = false)
         {
+            forcedRewindVisual = forced;
+            if (forced)
+            {
+                rewindHead.color = Color.Lerp(EndlessVisuals.RewindColor, Color.white, 0.4f);
+                rewindHeadGlow.color = new Color(0.65f, 0.35f, 1f, 0.3f);
+            }
             attacking = true;
             rewindVisualTime = 0f;
             attackFade = 0f;
             history.positionCount = historyGlow.positionCount = path.Count;
-            history.colorGradient = rewindGradient;
-            historyGlow.startColor = historyGlow.endColor = new Color(1f, 0.76f, 0.26f, 0.22f);
+            history.colorGradient = forced ? CreateGradient(EndlessVisuals.RewindColor, Color.white, 0.08f, 0.4f) : rewindGradient;
+            Color halo = forced ? EndlessVisuals.RewindColor : GameArt.Gold; halo.a = 0.22f;
+            historyGlow.startColor = historyGlow.endColor = halo;
             for (int i = 0; i < path.Count; i++) SetHistoryPoint(i, path[i].Position);
             attack.positionCount = attackGlow.positionCount = 0;
             SetAttackAlpha(1f);
@@ -215,7 +236,13 @@ namespace RewindRampage
             rewindSource.pitch = 1.3f;
             rewindSource.Play();
             shake = Mathf.Max(shake, 0.08f);
-            Burst(path[path.Count - 1].Position, GameArt.Gold, 14, 4f);
+            Burst(path[path.Count - 1].Position, forced ? EndlessVisuals.RewindColor : GameArt.Gold, 14, 4f);
+        }
+        public void EndForcedRewind()
+        {
+            StopRewind(); attackFade = 0f;
+            attack.positionCount = attackGlow.positionCount = history.positionCount = historyGlow.positionCount = 0;
+            forcedRewindVisual = false;
         }
 
         public void AppendAttackPoint(Vector2 position)
@@ -277,6 +304,40 @@ namespace RewindRampage
         {
             effectsSource.pitch = 1f;
             effectsSource.PlayOneShot(survived ? successClip : endClip, 0.75f);
+        }
+
+        public void PlayStoryMusic(GameAct act)
+        {
+            StopMusic();
+            AudioClip clip = act == GameAct.Rec ? act1Music : act == GameAct.Playback ? act2Music : act == GameAct.Archive ? act3Music : null;
+            StartMusic(clip, true);
+        }
+        public void PlayMenuMusic() { StopMusic(); StartMusic(menuMusic, true); }
+
+        // Called once on entering the results screen, including Endless results.
+        // Cinematic end cues remain separate: they may precede the actual settlement.
+        public void PlaySettlementMusic()
+        {
+            if (settlementMusicPlayed) return;
+            settlementMusicPlayed = true;
+            StartMusic(settlementMusic, false);
+        }
+
+        public void StopMusic()
+        {
+            settlementMusicPlayed = false;
+            if (musicSource == null) return;
+            musicSource.Stop(); musicSource.clip = null;
+        }
+
+        private void StartMusic(AudioClip clip, bool loop)
+        {
+            if (musicSource == null) return;
+            musicSource.Stop(); musicSource.clip = clip; musicSource.loop = loop;
+            musicSource.volume = musicVolume; musicSource.pitch = 1f; musicSource.mute = Muted;
+            if (clip == null) return;
+            musicSource.Play();
+            if (paused) musicSource.Pause();
         }
 
         public void NodeCreated(Vector2 position)
@@ -410,8 +471,9 @@ namespace RewindRampage
                 float opacity = attacking ? 1f : attackFade / RewindFadeDuration;
                 rewindHead.transform.localScale = Vector3.one * (1.05f + pulse * 0.18f);
                 rewindHeadGlow.transform.localScale = Vector3.one * (2.2f + pulse * 0.35f);
-                rewindHead.color = new Color(1f, 0.88f, 0.5f, opacity * 0.9f);
-                rewindHeadGlow.color = new Color(1f, 0.7f, 0.2f, opacity * 0.3f);
+                Color headColor = forcedRewindVisual ? Color.Lerp(EndlessVisuals.RewindColor, Color.white, pulse * 0.6f) : new Color(1f, 0.88f, 0.5f);
+                headColor.a = opacity * 0.9f; rewindHead.color = headColor;
+                headColor.a = opacity * 0.3f; rewindHeadGlow.color = headColor;
             }
             else rewindHead.enabled = rewindHeadGlow.enabled = false;
             shake = Mathf.MoveTowards(shake, 0f, deltaTime * 0.65f);
@@ -421,7 +483,7 @@ namespace RewindRampage
 
         private void SetAttackAlpha(float fraction)
         {
-            Color color = GameArt.Gold;
+            Color color = forcedRewindVisual ? EndlessVisuals.RewindColor : GameArt.Gold;
             color.a = fraction;
             attack.startColor = attack.endColor = color;
             color.a = fraction * 0.3f;
@@ -463,6 +525,7 @@ namespace RewindRampage
         {
             Muted = !Muted;
             effectsSource.mute = rewindSource.mute = ambienceSource.mute = burstSource.mute = Muted;
+            if (musicSource != null) musicSource.mute = Muted;
         }
 
         public void PlayTapeTransition()
@@ -474,6 +537,14 @@ namespace RewindRampage
         }
 
         public void PlayReplayWarning() { effectsSource.PlayOneShot(deniedClip, 0.35f); }
+
+        // P4 presentation only: no world-space motion, collider, burst damage or HP mutation.
+        public void BossImpact(float amplitude, bool landing)
+        {
+            shake = Mathf.Max(shake, Mathf.Clamp(amplitude, 0f, 0.3f));
+            effectsSource.pitch = landing ? 0.5f : 0.75f;
+            effectsSource.PlayOneShot(landing ? explosionClip : startClip, landing ? 0.36f : 0.18f);
+        }
 
         public void ParadoxHit(Vector2 position)
         {
@@ -507,6 +578,7 @@ namespace RewindRampage
             paused = value;
             if (value) { effectsSource.Pause(); rewindSource.Pause(); ambienceSource.Pause(); burstSource.Pause(); }
             else { effectsSource.UnPause(); rewindSource.UnPause(); ambienceSource.UnPause(); burstSource.UnPause(); }
+            if (musicSource != null) { if (value) musicSource.Pause(); else musicSource.UnPause(); }
         }
 
         private AudioSource CreateSource(bool loop, float volume)
@@ -561,7 +633,7 @@ namespace RewindRampage
 
         private void OnDestroy()
         {
-            for (int i = 0; i < generatedClips.Count; i++) if (generatedClips[i] != null) Destroy(generatedClips[i]);
+            for (int i = 0; i < generatedClips.Count; i++) EndlessVisuals.Release(generatedClips[i]);
         }
     }
 }

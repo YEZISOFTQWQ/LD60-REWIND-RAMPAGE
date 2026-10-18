@@ -9,6 +9,27 @@ namespace RewindRampage.Editor
 {
     public static class TapeTransportPreview
     {
+        public static void RenderP7Hud()
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity");
+            foreach (Vector2Int size in new[] { new Vector2Int(1600, 1000), new Vector2Int(1280, 720), new Vector2Int(1024, 768) })
+                for (int state = 9; state <= 10; state++) Render(size.x, size.y, state, "V090-Hud-" + size.x + "x" + size.y + "-" + state + ".png");
+            UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene, UnityEditor.SceneManagement.NewSceneMode.Single);
+        }
+        public static void RenderComboHud()
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity");
+            foreach (Vector2Int size in new[] { new Vector2Int(1600, 1000), new Vector2Int(1280, 720), new Vector2Int(1024, 768) })
+                Render(size.x, size.y, 8, "V086-Combo-" + size.x + "x" + size.y + ".png");
+            UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene, UnityEditor.SceneManagement.NewSceneMode.Single);
+        }
+        public static void RenderBossHud()
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity");
+            foreach (Vector2Int size in new[] { new Vector2Int(1600, 1000), new Vector2Int(1280, 720), new Vector2Int(1024, 768) })
+                for (int state = 4; state < 8; state++) Render(size.x, size.y, state, "V083-HUD-" + size.x + "x" + size.y + "-State" + state + ".png");
+            UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene, UnityEditor.SceneManagement.NewSceneMode.Single);
+        }
         // Edit Mode artwork capture only. No GameManager initialization or gameplay simulation.
         public static void UpgradeAndRender()
         {
@@ -20,7 +41,7 @@ namespace RewindRampage.Editor
 
         private static void Render(int width, int height, int state, string name)
         {
-            bool reverse = state == 1 || state == 2;
+            bool reverse = state == 1 || state == 2 || state == 7 || state == 9;
             RewindHud source = UnityEngine.Object.FindObjectOfType<RewindHud>(true);
             Camera original = Camera.main;
             if (source == null || original == null) throw new InvalidOperationException("Preview requires the existing HUD and arena camera.");
@@ -54,7 +75,7 @@ namespace RewindRampage.Editor
                 ((CanvasGroup)view.FindPropertyRelative("rewindOverlay").objectReferenceValue).gameObject.SetActive(false);
                 foreach (CanvasGroup fade in clone.GetComponentsInChildren<CanvasGroup>(true)) fade.alpha = 1f;
                 TapeTransportHud transport = (TapeTransportHud)view.FindPropertyRelative("tapeTransport").objectReferenceValue;
-                transport.DisplayLamps(reverse ? ClockLamps.Rew : ClockLamps.Rec | ClockLamps.Play, state == 3, 1f, 1f);
+                transport.DisplayLamps(reverse ? ClockLamps.Rew : state >= 9 ? ClockLamps.Play : ClockLamps.Rec | ClockLamps.Play, state == 3, 1f, 1f);
                 transport.TickMechanism(0.3f, 0.72f, reverse, true, reverse ? 1f : 0f);
                 RewindHud cloneHud = clone.GetComponent<RewindHud>();
                 cloneHud.LayoutTerminal(camera, tuning.arenaHalfSize, width, height);
@@ -68,9 +89,33 @@ namespace RewindRampage.Editor
                 clock.Display(reverse ? 61.234f : 58f, reverse ? 1f : 0f, reverse ? 1f : 0f, 1f, 1f);
                 ((TextMeshProUGUI)view.FindPropertyRelative("abilityLabel").objectReferenceValue).text =
                     state == 2 ? "<<< RECONSTRUCTING" : state == 3 ? "RECHARGING" : reverse ? "<<< REWINDING / 5x" : "MOVE TO RECORD";
+                if (state >= 4 && state < 8) ((TextMeshProUGUI)view.FindPropertyRelative("abilityLabel").objectReferenceValue).text =
+                    new[] { "P4 / TRACK LOCK", "P5 / DUAL PATTERN", "P6 / BAD SECTORS", "<< REW / P6" }[state - 4];
                 ((TextMeshProUGUI)view.FindPropertyRelative("tapeTime").objectReferenceValue).text =
                     state == 2 ? "<< CAPTURE 30.0s / 30.0s" : state == 3 ? "COOLDOWN 2.0s" : reverse ? "<< 2.2s / 3.0s" : "2.2s / 3.0s";
+                if (state >= 9)
+                {
+                    clock.DisplayBossRta(144.39f, 1f, reverse, 7, reverse ? "FORCED REWIND / LOOP 01" : "REMEMBER. / LOOP 01");
+                    ((TextMeshProUGUI)view.FindPropertyRelative("abilityLabel").objectReferenceValue).text = reverse ? "MEMORY LOCK / << REW" : "P7 / REMEMBER.";
+                    ((TextMeshProUGUI)view.FindPropertyRelative("tapeTime").objectReferenceValue).text = reverse ? "FORCED << 10.0s" : "COOLDOWN 2.0s";
+                    terminal.text = reverse ? "> MEMORY LOCK.\n> OPERATOR CONTROL SEIZED.\n> FORCED REWIND INITIATED." : "> REMEMBER.\n> OPERATOR CONTROL RESTORED.";
+                    terminal.maxVisibleCharacters = int.MaxValue;
+                }
                 Canvas.ForceUpdateCanvases();
+                if (state == 8)
+                {
+                    cloneHud.ShowAttackCombo(23);
+                    TextMeshProUGUI combo = (TextMeshProUGUI)view.FindPropertyRelative("rewindCombo").objectReferenceValue;
+                    combo.ForceMeshUpdate();
+                    if (combo.GetPreferredValues(combo.text).x > combo.rectTransform.rect.width || combo.textInfo.lineCount != 1)
+                        throw new InvalidOperationException("Rewind combo must remain a single unclipped line.");
+                    Vector3[] corners = new Vector3[4]; combo.rectTransform.GetWorldCorners(corners);
+                    foreach (Vector3 point in corners)
+                    {
+                        Vector3 local = clone.transform.InverseTransformPoint(point);
+                        if (!((RectTransform)clone.transform).rect.Contains(local)) throw new InvalidOperationException("Combo outside canvas.");
+                    }
+                }
                 ValidateLayout(transport, view, name);
                 foreach (TMP_Text text in clone.GetComponentsInChildren<TMP_Text>(true)) if (text.gameObject.activeInHierarchy) text.ForceMeshUpdate();
                 Canvas.ForceUpdateCanvases();

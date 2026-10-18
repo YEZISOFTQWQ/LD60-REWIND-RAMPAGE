@@ -16,6 +16,7 @@ namespace RewindRampage
         private readonly ReplayGhostController ghost;
         private readonly ReplayAttackController attacks;
         private readonly Act2FutureTrail futureTrail;
+        private readonly float storySpeed;
         private float transitionRemaining;
         private bool reconstructionPrepared, reverseStarted, duplicateRevealed;
         public GhostBossHealth Boss { get; }
@@ -37,6 +38,7 @@ namespace RewindRampage
             Action preparePlayer, Action onBossHit, Action onPlayerHit, Action<bool> onFinished, Func<Vector2, Vector2> chooseEdge)
         {
             this.player = player; this.feedback = feedback;
+            storySpeed = tuning.storyPlaybackSpeed;
             this.preparePlayer = preparePlayer; this.onFinished = onFinished;
             ghost = new ReplayGhostController(art, feedback.transform);
             attacks = new ReplayAttackController(tuning, art, player, feedback, onPlayerHit);
@@ -88,7 +90,7 @@ namespace RewindRampage
         public void TickTransition(float deltaTime)
         {
             if (!IsTransition) return;
-            transitionRemaining = Mathf.Max(0f, transitionRemaining - deltaTime);
+            transitionRemaining = Mathf.Max(0f, transitionRemaining - deltaTime * storySpeed);
             ghost.TickVisual(deltaTime);
             if (State == GhostDuelState.TransitionIn)
             {

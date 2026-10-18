@@ -8,11 +8,12 @@ namespace RewindRampage
 
     public sealed class TimeCoreController
     {
+        public const int MaximumHealth = 2;
         private readonly GameTuning tuning;
         private readonly Action<bool> onHit;
         private readonly Transform root;
         private readonly SpriteRenderer body, ring, halo;
-        private readonly SpriteRenderer[] integrity = new SpriteRenderer[3];
+        private readonly SpriteRenderer[] integrity = new SpriteRenderer[MaximumHealth];
         private readonly HashSet<int> damagingActions = new HashSet<int>();
         private float visualTime, breakFade, birth;
         public TimeCoreState State { get; private set; }
@@ -36,7 +37,7 @@ namespace RewindRampage
 
         public void Reset()
         {
-            State = TimeCoreState.Dormant; Health = 3;
+            State = TimeCoreState.Dormant; Health = MaximumHealth;
             damagingActions.Clear(); visualTime = breakFade = birth = 0f;
             root.localScale = Vector3.one;
             root.gameObject.SetActive(false);

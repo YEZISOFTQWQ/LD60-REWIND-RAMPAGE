@@ -98,6 +98,20 @@ namespace RewindRampage
 
         public bool HasSegment(int segmentId) { return segmentIds.Contains(segmentId); }
 
+        // After a forced world seek, the normal attack may only use a real historical
+        // prefix ending at the restored pose, never the ten-second forced path.
+        public void RebaseHistoricalPrefix(RunRecording history, float target, float clock, float durationBudget)
+        {
+            float from = Mathf.Max(history.Frames[0].Time, target - Mathf.Min(tuning.recordDuration, durationBudget));
+            Clear(BossPlayerHistory.Sample(history, from).Position, clock - (target - from));
+            foreach (ReplayFrame frame in history.Frames)
+            {
+                if (frame.Time <= from || frame.Time >= target) continue;
+                Record(currentPosition, frame.Position, currentTime, clock - (target - frame.Time));
+            }
+            Record(currentPosition, BossPlayerHistory.Sample(history, target).Position, currentTime, clock);
+        }
+
         private void AccumulateMovement(TrailPoint from, TrailPoint to)
         {
             if ((to.Position - from.Position).sqrMagnitude > 0.000001f)

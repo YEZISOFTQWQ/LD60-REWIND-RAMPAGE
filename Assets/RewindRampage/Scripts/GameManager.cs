@@ -3,12 +3,14 @@ using UnityEngine;
 namespace RewindRampage
 {
     public enum SessionState { Title, Playing, Paused, Results }
-    public enum GameAct { Rec, Playback, Archive }
+    public enum GameAct { Rec, Playback, Archive, Endless }
 
     public sealed class GameManager : MonoBehaviour
     {
+        public const string EndlessUnlockPreference = "RewindRampage.EndlessUnlocked";
         [SerializeField] private GameTuning tuning;
         [SerializeField] private GameArt art;
+        [SerializeField] private EndlessSettings endlessSettings;
         [SerializeField] private PlayerController player;
         [SerializeField] private EnemySpawner spawner;
         [SerializeField] private FeedbackController feedback;
@@ -28,6 +30,7 @@ namespace RewindRampage
         private Act1StoryDirector story;
         private Act2StoryDirector act2Story;
         private Act3StoryDirector act3Story;
+        private EndlessPhaseDirector endless;
         private GameTuning runtimeTuning;
         private Vector2 originalArenaHalfSize;
         private float arenaScale = 1f;
@@ -40,6 +43,8 @@ namespace RewindRampage
         public GameAct Act { get; private set; }
         public bool InDuel => Act == GameAct.Playback;
         public bool InArchive => Act == GameAct.Archive;
+        public bool InEndless => Act == GameAct.Endless;
+        public EndlessPhaseDirector Endless => endless;
         public Act3Director Archive => archive;
         public GhostDuelManager Duel => duel;
         public Act2StoryDirector Act2Story => act2Story;
@@ -62,8 +67,10 @@ namespace RewindRampage
         public int EnemyCount => spawner.AliveCount;
         public bool Survived { get; private set; }
         public bool Muted => feedback.Muted;
+        public Vector2 CameraShakeOffset => feedback.CameraShakeOffset;
         public bool StoryBooting => story != null && story.IsBooting;
         public bool Invincible => player.Invincible;
+        public bool EndlessUnlocked { get; private set; }
         public void ConfigureEntryAct(GameAct entry) { initialAct = entry; }
         public void ConfigureStoryArena(Transform arena) { storyArena = arena; }
 
@@ -91,15 +98,16 @@ namespace RewindRampage
             spawner.Initialize(tuning);
             recorder = new TrailRecorder(tuning);
             damage = new TrailDamageSystem(tuning, spawner, OnKill, OnExplosion);
+            damage.AttackComboChanged += hud.ShowAttackCombo;
             intersections = new TrailIntersectionDetector(tuning, recorder, OnNodeCreated);
             ghostNodes = new GhostNodeController(tuning, art, damage, feedback, OnNodeTriggered);
             runRecorder = new RunRecorder(tuning.replaySampleInterval);
             rewind = new RewindController(tuning, player, recorder, damage, feedback, intersections, ghostNodes, OnRewindFinished);
             rewind.SegmentTraversed += (from, to, time, id) => runRecorder.RecordAttackSegment(from, to, time, tuning.attackRadius, id);
             rewind.NodeBurst += (node, time, id) => runRecorder.RecordNodeBurst(node, time, tuning.ghostNodeRadius, id);
-            rewind.PositionObserved += (position, time, rewinding) => runRecorder.RecordFrame(position, time, rewinding, true);
+            rewind.PositionObserved += (position, time, rewinding) => runRecorder.RecordFrame(position, time, rewinding, true, InEndless ? player.Facing : (Vector2?)null);
             duel = new GhostDuelManager(tuning, art, player, feedback, PrepareDuelPlayer,
-                () => hud.ShowBurst("PARADOX HIT", "THE PAST IS COMING APART", GameArt.Gold, 1.2f),
+                () => { damage.RegisterTargetHit(); hud.ShowBurst("PARADOX HIT", "THE PAST IS COMING APART", GameArt.Gold, 1.2f); },
                 () => hud.ShowNotice("HISTORICAL ATTACK HIT / WATCH THE RED WARNINGS."), OnDuelFinished, spawner.ChooseEdgePosition);
             damage.SetBossTarget(duel.Boss);
             archive = new Act3Director(tuning, art, player, feedback, damage.RegisterArchiveKill,
@@ -107,6 +115,7 @@ namespace RewindRampage
                 position => { feedback.Hurt(position); hud.ShowNotice("ECHO REWIND HIT / DODGE THE LOCKED RED PATHS."); }, OnArchiveFinished);
             damage.SetArchiveTarget(archive);
             BestScore = PlayerPrefs.GetInt("RewindRampage.BestScore", 0);
+            EndlessUnlocked = PlayerPrefs.GetInt(EndlessUnlockPreference, 0) == 1;
             player.ResetPlayer();
             recorder.Clear(player.Position, 0f);
             State = SessionState.Title;
@@ -114,8 +123,12 @@ namespace RewindRampage
             story = new Act1StoryDirector(tuning, art, player, hud, feedback, storyArena);
             act2Story = new Act2StoryDirector(tuning, art, player, duel, hud, storyArena, feedback.transform, SetArenaScale);
             act3Story = new Act3StoryDirector(tuning, art, player, archive, hud, feedback, storyArena);
+            endless = new EndlessPhaseDirector(tuning, endlessSettings, art, player, spawner, damage, feedback, hud, runRecorder, CheckContacts, () => EndEndless(true), rewind);
+            endless.P4Requested += () => feedback.PlayStoryMusic(GameAct.Archive);
+            rewind.HistoryRewound += endless.QueueHistoryRewound;
             hud.ShowState();
             if (initialAct == GameAct.Archive) StartArchive();
+            else feedback.PlayMenuMusic();
         }
 
         private void Update()
@@ -123,6 +136,7 @@ namespace RewindRampage
             if (Screen.width != lastWidth || Screen.height != lastHeight) FitCamera();
             if (Input.GetKeyDown(KeyCode.M)) ToggleMute();
             if (Input.GetKeyDown(KeyCode.F2)) ToggleInvincibility();
+            if (Input.GetKeyDown(KeyCode.F4)) UnlockEndlessMode();
             if (State == SessionState.Title || State == SessionState.Results)
             {
                 if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return)) ActivatePrimary();
@@ -142,6 +156,7 @@ namespace RewindRampage
 
         private void TickGame(float deltaTime)
         {
+            if (InEndless) { TickEndless(deltaTime); return; }
             if (InArchive) { TickArchive(deltaTime); return; }
             if (InDuel) { TickDuel(deltaTime); return; }
             if (story.IsBooting)
@@ -221,7 +236,7 @@ namespace RewindRampage
             {
                 if (act3Story.TickEnding(deltaTime))
                 {
-                    act3Story.Stop(false); State = SessionState.Results; hud.ShowState();
+                    act3Story.Stop(false); State = SessionState.Results; feedback.PlaySettlementMusic(); hud.ShowState();
                 }
                 return;
             }
@@ -253,6 +268,7 @@ namespace RewindRampage
 
         private void StartArchive(bool fromStory)
         {
+            endless?.Stop();
             Vector2 entryPosition = player.Position;
             act3Story.Stop();
             act2Story.Stop();
@@ -272,6 +288,7 @@ namespace RewindRampage
             act3Story.Begin();
             State = SessionState.Playing;
             feedback.SetPaused(false); feedback.PlayStart();
+            feedback.PlayStoryMusic(GameAct.Archive);
             hud.ShowState();
         }
 
@@ -283,6 +300,7 @@ namespace RewindRampage
 
         private void OnArchiveCoreHit(bool destroyed)
         {
+            damage.RegisterTargetHit();
             feedback.ArchiveCoreImpact(Vector2.zero, destroyed);
             hud.ShowCoreImpact(destroyed);
             if (destroyed) act3Story.CoreDestroyed();
@@ -291,6 +309,7 @@ namespace RewindRampage
         private void OnArchiveFinished(bool victory)
         {
             Survived = victory;
+            if (victory) UnlockEndlessMode();
             rewind.Reset(); feedback.PlayEnd(victory);
             SaveBestScore(); act3Story.BeginEnding(victory);
         }
@@ -312,6 +331,7 @@ namespace RewindRampage
             Act = GameAct.Playback;
             duel.StartDuel(recording);
             act2Story.Begin();
+            feedback.PlayStoryMusic(GameAct.Playback);
             SaveBestScore();
             hud.ShowState();
         }
@@ -398,8 +418,11 @@ namespace RewindRampage
         {
             Score += kill.Reward;
             TotalKills++;
-            BestCombo = Mathf.Max(BestCombo, kill.Combo);
-            BestRewindKills = Mathf.Max(BestRewindKills, kill.Combo);
+            if (kill.Source != DamageSource.FieldMechanic)
+            {
+                BestCombo = Mathf.Max(BestCombo, kill.Combo);
+                BestRewindKills = Mathf.Max(BestRewindKills, kill.Combo);
+            }
             feedback.Kill(kill.Position, kill.Reward, kill.Combo);
             hud.ShowBurst(kill.Combo == 1 ? "REWIND KILL" : kill.Combo + "x COMBO",
                 "+" + kill.Reward + " / CHAIN THE SIGNAL", GameArt.Gold, 1.2f);
@@ -442,6 +465,7 @@ namespace RewindRampage
 
         public void StartRun()
         {
+            endless?.Stop();
             act3Story.Stop();
             act2Story.Stop(); SetArenaScale(1f);
             archive.Reset();
@@ -462,22 +486,95 @@ namespace RewindRampage
             State = SessionState.Playing;
             feedback.SetPaused(false);
             feedback.PlayStart();
+            feedback.PlayStoryMusic(GameAct.Rec);
             hud.ShowState();
             story.Begin();
         }
 
         public void ActivatePrimary()
         {
-            if (State == SessionState.Paused) TogglePause();
+            if (State == SessionState.Results && InArchive && Survived) Act3TestEntry.LoadMainMenu();
+            else if (State == SessionState.Results && InEndless) StartEndless();
+            else if (State == SessionState.Paused) TogglePause();
             else if (State == SessionState.Results && InArchive) StartArchive();
             else if (State == SessionState.Results && InDuel && !Survived) RetryDuel();
             else if (State == SessionState.Results && InDuel && Survived) Act3TestEntry.LoadArchive();
             else StartRun();
         }
 
+        public void EnterEndlessMode()
+        {
+            if (State != SessionState.Title || !EndlessUnlocked) return;
+            StartEndless();
+        }
+
+        private void StartEndless()
+        {
+            act3Story.Stop(); act2Story.Stop(); story.Stop(); SetArenaScale(1f);
+            archive.Reset(); duel.Reset(); feedback.ResetFeedback(); rewind.Reset(); spawner.ResetEnemies(); player.ResetPlayer();
+            Act = GameAct.Endless; Elapsed = 0f;
+            Score = TotalKills = BestRewindKills = BestCombo = RewindCount = TotalGhostNodeTriggers = TotalChainKills = 0;
+            Survived = false; intersections.IgnoreUnlockDelay = true; recorder.Clear(player.Position, 0f);
+            State = SessionState.Playing; feedback.SetPaused(false); hud.ClearStoryPresentation(); hud.ShowState();
+            feedback.PlayStoryMusic(GameAct.Rec);
+            endless.Start(); feedback.PlayStart();
+        }
+
+        private void TickEndless(float deltaTime)
+        {
+            bool requestRewind = Input.GetKeyDown(KeyCode.Space);
+            float remaining = deltaTime;
+            while (remaining > 0.000001f && State == SessionState.Playing && endless.IsRunning)
+            {
+                float slice = endless.SliceDuration(remaining, rewind.IsRewinding); remaining -= slice;
+                float before = Elapsed; Vector2 previous = player.Position; movementStart = previous; Elapsed += slice;
+                bool forcing = endless.ForcedRewinding;
+                bool wasRewinding = rewind.IsRewinding;
+                if (!forcing) rewind.TickCooldown(slice);
+                if (forcing) { /* Boss applies the recorded pose in endless.Tick below. */ }
+                else if (wasRewinding) rewind.Step(slice, Elapsed);
+                else
+                {
+                    player.Move(MovementInput(), slice); recorder.Record(previous, player.Position, before, Elapsed);
+                    runRecorder.RecordFrame(player.Position, Elapsed, false, false, player.Facing);
+                    if (requestRewind)
+                    {
+                        if (rewind.TryStart(Elapsed)) RewindCount++;
+                        else { feedback.PlayDenied(); hud.ShowNotice("MOVE TO RECORD / LET THE TAPE RECHARGE."); }
+                    }
+                }
+                requestRewind = false;
+                runRecorder.RecordFrame(player.Position, Elapsed, rewind.IsRewinding, false, player.Facing);
+                endless.Tick(slice, Elapsed, previous, wasRewinding, rewind.IsRewinding);
+                if (player.Health <= 0) EndEndless(false);
+            }
+            feedback.DrawHistory(recorder, rewind.IsRewinding || endless.ForcedRewinding);
+            player.UpdateVisual(Elapsed, rewind.IsRewinding || endless.ForcedRewinding, rewind.CooldownFraction, rewind.IsReady, endless.ForcedRewinding);
+        }
+
+        private void EndEndless(bool completedOpening)
+        {
+            if (State != SessionState.Playing) return;
+            Survived = completedOpening; endless.Freeze(); rewind.Reset(); spawner.SetFrozenVisuals(true);
+            State = SessionState.Results; feedback.PlayEnd(completedOpening); feedback.PlaySettlementMusic(); SaveBestScore(); hud.ShowState();
+        }
+
+        private void UnlockEndlessMode()
+        {
+            if (EndlessUnlocked) return;
+            EndlessUnlocked = true;
+            PlayerPrefs.SetInt(EndlessUnlockPreference, 1);
+            PlayerPrefs.Save();
+            hud.RefreshEndlessEntry();
+            if (State == SessionState.Title) hud.ShowState();
+            else if (State == SessionState.Playing && !InArchive) hud.ShowNotice("ENDLESS MODE UNLOCKED.");
+        }
+
         public void SecondaryAction()
         {
-            if (InArchive && State == SessionState.Results) Act3TestEntry.LoadMainMenu();
+            if (InEndless && State == SessionState.Results) Act3TestEntry.LoadMainMenu();
+            else if (InEndless) StartEndless();
+            else if (InArchive && State == SessionState.Results) Act3TestEntry.LoadMainMenu();
             else if (InArchive) StartArchive();
             else StartRun();
         }
@@ -493,6 +590,7 @@ namespace RewindRampage
             feedback.SetPaused(false);
             duel.StartDuel(duel.Recording, false);
             act2Story.Begin();
+            feedback.PlayStoryMusic(GameAct.Playback);
             hud.ShowState();
         }
 
@@ -509,6 +607,7 @@ namespace RewindRampage
             act2Story.Stop();
             State = SessionState.Results;
             feedback.PlayEnd(false);
+            feedback.PlaySettlementMusic();
             SaveBestScore();
             hud.ShowState();
         }
@@ -537,6 +636,7 @@ namespace RewindRampage
             rewind.Reset();
             spawner.SetFrozenVisuals(false);
             feedback.PlayEnd(survived);
+            feedback.PlaySettlementMusic();
             SaveBestScore();
             hud.ShowState();
         }
@@ -582,6 +682,9 @@ namespace RewindRampage
 
         private void OnDestroy()
         {
+            if (rewind != null && endless != null) rewind.HistoryRewound -= endless.QueueHistoryRewound;
+            if (damage != null) damage.AttackComboChanged -= hud.ShowAttackCombo;
+            endless?.Dispose();
             damage?.Dispose();
             intersections?.Dispose();
             duel?.Dispose();

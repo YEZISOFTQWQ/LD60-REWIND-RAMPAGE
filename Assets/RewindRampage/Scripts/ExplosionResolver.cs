@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace RewindRampage
 {
-    public enum DamageSource { Trail, GhostNode, VolatileExplosion }
+    public enum DamageSource { Trail, GhostNode, VolatileExplosion, FieldMechanic }
 
     public readonly struct DamageContext
     {

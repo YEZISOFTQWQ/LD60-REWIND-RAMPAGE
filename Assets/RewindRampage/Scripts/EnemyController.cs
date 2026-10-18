@@ -17,6 +17,7 @@ namespace RewindRampage
 
         public bool IsAlive { get; private set; }
         public bool IsArmed => warningRemaining <= 0f;
+        public float SpawnProgress => warningDuration > 0f ? 1f - warningRemaining / warningDuration : 1f;
         public bool IsDead => !IsAlive;
         public bool IsVolatile { get; private set; }
         public int SpawnId { get; private set; }
@@ -65,7 +66,7 @@ namespace RewindRampage
 
         public void UpdateVisual(bool frozen)
         {
-            float spawn = warningDuration > 0f ? 1f - warningRemaining / warningDuration : 1f;
+            float spawn = SpawnProgress;
             Color color = IsVolatile ? GameArt.Orange : frozen ? GameArt.Gold : GameArt.Red;
             color.a = IsArmed ? 1f : 0.2f + spawn * 0.6f;
             body.color = color;

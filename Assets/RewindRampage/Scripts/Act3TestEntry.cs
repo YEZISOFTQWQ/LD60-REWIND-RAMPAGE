@@ -8,9 +8,6 @@ namespace RewindRampage
         public static void LoadArchive() { SceneManager.LoadScene("Act3"); }
         public static void LoadMainMenu() { SceneManager.LoadScene("SampleScene"); }
 
-        private void Update()
-        {
-            if (Input.GetKeyDown(KeyCode.F3)) LoadArchive();
-        }
+        // Scene-loading helpers remain for retry/menu flows. The player-facing F3 shortcut is retired.
     }
 }

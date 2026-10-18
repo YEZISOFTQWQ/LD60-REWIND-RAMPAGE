@@ -88,7 +88,7 @@ namespace RewindRampage
                     VolatileCount < tuning.maximumVolatileEnemies && (!firstVolatileSpawned ||
                     Random.value < Mathf.Lerp(tuning.initialVolatileChance, tuning.finalVolatileChance, volatileProgress));
                 bool spawned = Spawn(ChooseEdgePosition(player.Position), spawnVolatile ? tuning.volatileSpeed :
-                    tuning.enemySpeed * Mathf.Lerp(0.72f, 1f, Mathf.Clamp01(elapsed / 15f)), tuning.spawnWarningDuration, spawnVolatile);
+                    tuning.enemySpeed * Mathf.Lerp(0.72f, 1f, Mathf.Clamp01(elapsed / 15f)), tuning.spawnWarningDuration, spawnVolatile) != null;
                 if (spawned && spawnVolatile) firstVolatileSpawned = true;
                 spawnTimer += Mathf.Lerp(tuning.initialSpawnInterval, tuning.finalSpawnInterval, difficulty);
                 // Do not accumulate an unbounded spawn debt during a very slow frame.
@@ -120,17 +120,23 @@ namespace RewindRampage
             return best;
         }
 
-        private bool Spawn(Vector2 position, float speed, float warning, bool isVolatile = false)
+        public EnemyController SpawnTracker(Vector2 target) => Spawn(ChooseEdgePosition(target), tuning.enemySpeed, tuning.spawnWarningDuration);
+        public EnemyController SpawnTracker(Vector2 target, float speed, float warning) => Spawn(ChooseEdgePosition(target), speed, warning);
+
+        public void TickTrackers(float deltaTime, Vector2 target)
+        { foreach (EnemyController enemy in enemies) if (enemy.IsAlive) enemy.Tick(deltaTime, target); }
+
+        private EnemyController Spawn(Vector2 position, float speed, float warning, bool isVolatile = false)
         {
             for (int i = 0; i < enemies.Count; i++)
             {
                 if (enemies[i].IsAlive) continue;
                 enemies[i].Spawn(++nextSpawnId, tuning.ClampToArena(position, tuning.enemyRadius), speed, warning, isVolatile);
-                return true;
+                return enemies[i];
             }
             EnemyController added = CreateEnemy();
             added.Spawn(++nextSpawnId, tuning.ClampToArena(position, tuning.enemyRadius), speed, warning, isVolatile);
-            return true;
+            return added;
         }
 
         public void SetFrozenVisuals(bool frozen)

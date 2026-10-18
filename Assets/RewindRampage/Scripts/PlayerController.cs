@@ -63,6 +63,8 @@ namespace RewindRampage
         }
 
         public void SetPosition(Vector2 position) { transform.position = position; }
+        public void SetHistoricalPose(ReplayFrame pose)
+        { SetPosition(pose.Position); if (pose.Facing.sqrMagnitude > 0.001f) facing = pose.Facing.normalized; }
         public void SetPresentationGlitch(float offset) { body.transform.localPosition = new Vector3(offset, 0f, 0f); }
         public void Protect(float time, float duration) { invulnerableUntil = Mathf.Max(invulnerableUntil, time + duration); }
 
@@ -77,9 +79,9 @@ namespace RewindRampage
         // One authored event; combat immunity and debug god mode do not suppress it.
         public void ApplyStoryDamage(int amount) { Health = Mathf.Max(0, Health - Mathf.Max(0, amount)); }
 
-        public void UpdateVisual(float time, bool rewinding, float cooldownFraction, bool ready)
+        public void UpdateVisual(float time, bool rewinding, float cooldownFraction, bool ready, bool forced = false)
         {
-            Color color = rewinding ? GameArt.Gold : GameArt.Cyan;
+            Color color = forced ? EndlessVisuals.RewindColor : rewinding ? GameArt.Gold : GameArt.Cyan;
             bool blink = !rewinding && time < invulnerableUntil && Mathf.FloorToInt(time * 22f) % 2 == 0;
             body.color = blink ? Color.white : color;
             body.transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(facing.y, facing.x) * Mathf.Rad2Deg - 90f);
@@ -89,7 +91,7 @@ namespace RewindRampage
             float progress = rewinding ? 1f : cooldownFraction > 0f ? 1f - cooldownFraction : ready ? 1f : 0f;
             int count = progress <= 0f ? 0 : Mathf.CeilToInt(40f * progress) + 1;
             cooldownRing.positionCount = count;
-            cooldownRing.startColor = cooldownRing.endColor = rewinding ? GameArt.Gold : ready ? GameArt.Cyan : GameArt.Muted;
+            cooldownRing.startColor = cooldownRing.endColor = rewinding ? color : ready ? GameArt.Cyan : GameArt.Muted;
             for (int i = 0; i < count; i++)
             {
                 float angle = (90f - 360f * progress * i / Mathf.Max(1, count - 1)) * Mathf.Deg2Rad;

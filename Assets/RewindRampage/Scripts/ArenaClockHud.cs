@@ -24,6 +24,12 @@ namespace RewindRampage
         private Mesh runtimeMesh;
         private Color32[] colors;
         private readonly int[] values = new int[7];
+        private TextMeshPro bossCaption;
+        private Vector2 cameraCompensation;
+        private float glitchOffset;
+        private float bossCenter = float.NaN;
+        public float DisplayedTime { get; private set; }
+        public bool DisplaysBossRta { get; private set; }
         public Mesh Author(GameArt art, Material material, bool archive)
         {
             Transform existing = transform.Find("Phosphor segments");
@@ -127,17 +133,49 @@ namespace RewindRampage
 
         public void Display(float time, float redMix, float milliseconds, float visibility, float pulse)
         {
+            DisplaysBossRta = false;
+            geometry.GetComponent<MeshRenderer>().sortingOrder = -15;
+            if (bossCaption != null) bossCaption.gameObject.SetActive(false);
+            DisplayInternal(time, redMix, milliseconds, visibility, pulse, false);
+        }
+
+        public void DisplayBossRta(float time, float visibility, bool reverse, int phase = 4, string phaseCaption = "MAGNETIC IMPACT")
+        {
+            DisplaysBossRta = true;
+            geometry.GetComponent<MeshRenderer>().sortingOrder = -1;
+            if (bossCaption == null)
+            {
+                bossCaption = new GameObject("Boss RTA caption", typeof(TextMeshPro)).GetComponent<TextMeshPro>();
+                bossCaption.transform.SetParent(transform, false); bossCaption.transform.localPosition = new Vector3(0f, 3.15f);
+                bossCaption.font = units[0].font; bossCaption.fontSize = 3f; bossCaption.alignment = TextAlignmentOptions.Center;
+                bossCaption.enableWordWrapping = false; bossCaption.rectTransform.sizeDelta = new Vector2(22f, 1.8f);
+                bossCaption.GetComponent<MeshRenderer>().sortingOrder = 0;
+            }
+            bossCaption.gameObject.SetActive(true); bossCaption.text = "P" + phase + " / " + phaseCaption + (reverse ? "\nRTA  << REW" : "\nRTA");
+            bossCaption.color = new Color(0.54f, 0.91f, 1f, visibility * 0.65f);
+            DisplayInternal(time, 0f, 1f, visibility, 1f, true);
+        }
+
+        private void DisplayInternal(float time, float redMix, float milliseconds, float visibility, float pulse, bool centiseconds)
+        {
+            DisplayedTime = time;
             if (runtimeMesh == null)
             {
                 runtimeMesh = Instantiate(geometry.sharedMesh); runtimeMesh.MarkDynamic();
                 geometry.sharedMesh = runtimeMesh; colors = runtimeMesh.colors32;
             }
-            Paint(runtimeMesh, time, redMix, milliseconds, visibility, pulse);
+            Paint(runtimeMesh, time, redMix, milliseconds, visibility, pulse, centiseconds);
         }
 
-        private void Paint(Mesh mesh, float time, float redMix, float milliseconds, float visibility, float pulse)
+        private void Paint(Mesh mesh, float time, float redMix, float milliseconds, float visibility, float pulse, bool centiseconds = false)
         {
-            float centeredX = -Mathf.Lerp(normalCenter, expandedCenter, Mathf.Clamp01(milliseconds));
+            if (centiseconds && float.IsNaN(bossCenter))
+            {
+                Vector3[] vertices = mesh.vertices; float low = float.PositiveInfinity, high = float.NegativeInfinity;
+                for (int i = 0; i < 6 * 7 * 4; i++) { low = Mathf.Min(low, vertices[i].x); high = Mathf.Max(high, vertices[i].x); }
+                bossCenter = (low + high) * 0.5f;
+            }
+            float centeredX = centiseconds ? -bossCenter : -Mathf.Lerp(normalCenter, expandedCenter, Mathf.Clamp01(milliseconds));
             geometry.transform.localPosition = new Vector3(centeredX, 0f, 0f);
             int total = (int)Math.Floor(Math.Max(0d, (double)time) * 1000d);
             int seconds = total / 1000;
@@ -151,6 +189,7 @@ namespace RewindRampage
             for (int digit = 0; digit < 7; digit++)
             {
                 float alpha = digit >= 4 ? milliseconds : 1f;
+                if (centiseconds && digit == 6) alpha = 0f;
                 for (int segment = 0; segment < 7; segment++)
                 {
                     Color color = (Digits[values[digit]] & (1 << segment)) != 0 ? on : off;
@@ -162,6 +201,7 @@ namespace RewindRampage
             for (int i = 0; i < units.Length; i++)
             {
                 Color color = tone; color.a = visibility * brightness * 0.65f * (i == 2 ? milliseconds : 1f);
+                if (centiseconds) color.a = 0f;
                 units[i].color = color;
                 units[i].transform.localPosition = unitOrigins[i] + Vector3.right * centeredX;
             }
@@ -173,7 +213,9 @@ namespace RewindRampage
             for (int i = 0; i < 4; i++) colors[quad * 4 + i] = color;
         }
 
-        public void SetGlitch(float offset) { transform.localPosition = new Vector3(offset, 0f, 0f); }
+        public void SetGlitch(float offset) { glitchOffset = offset; ApplyPresentationOffset(); }
+        public void SetCameraCompensation(Vector2 offset) { cameraCompensation = offset; ApplyPresentationOffset(); }
+        private void ApplyPresentationOffset() { transform.localPosition = (Vector3)cameraCompensation + Vector3.right * glitchOffset; }
 
         private void OnDestroy() { if (runtimeMesh != null) Destroy(runtimeMesh); }
     }

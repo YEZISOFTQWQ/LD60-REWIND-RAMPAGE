@@ -9,8 +9,9 @@ namespace RewindRampage
         public readonly float Time;
         public readonly Vector2 Position;
         public readonly bool IsRewinding;
-        public ReplayFrame(float time, Vector2 position, bool rewinding)
-        { Time = time; Position = position; IsRewinding = rewinding; }
+        public readonly Vector2 Facing;
+        public ReplayFrame(float time, Vector2 position, bool rewinding, Vector2 facing = default)
+        { Time = time; Position = position; IsRewinding = rewinding; Facing = facing; }
     }
 
     public readonly struct ReplayAttackSegment
@@ -52,7 +53,7 @@ namespace RewindRampage
                 while (boundary + 1 < frames.Count && frames[boundary + 1].Time <= captureStart) boundary++;
                 ReplayFrame a = frames[boundary], b = frames[Mathf.Min(boundary + 1, frames.Count - 1)];
                 capturedFrames.Add(new ReplayFrame(captureStart,
-                    Vector2.Lerp(a.Position, b.Position, Mathf.InverseLerp(a.Time, b.Time, captureStart)), a.IsRewinding));
+                    Vector2.Lerp(a.Position, b.Position, Mathf.InverseLerp(a.Time, b.Time, captureStart)), a.IsRewinding, a.Facing));
                 for (int i = boundary + 1; i < frames.Count; i++)
                     if (frames[i].Time > captureStart) capturedFrames.Add(frames[i]);
             }

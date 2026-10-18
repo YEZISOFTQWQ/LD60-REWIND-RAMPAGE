@@ -47,6 +47,8 @@ namespace RewindRampage
         private float presentationOpacity = 1f;
         private bool targetLocked;
         private float targetPulse;
+        private bool visualOnly;
+        private float maximumRecordedSpeed = float.PositiveInfinity;
         public Vector2 Position => root.position;
         public bool IsRewinding { get; private set; }
         public bool IsWarning { get; set; }
@@ -76,6 +78,12 @@ namespace RewindRampage
             JumpToClip(start, end);
         }
 
+        public void UseAsVisualOnly(float maximumSpeed)
+        {
+            visualOnly = true; maximumRecordedSpeed = maximumSpeed;
+            foreach (Transform child in root.GetComponentsInChildren<Transform>(true)) child.gameObject.layer = 2;
+        }
+
         public void JumpToClip(float start, float end)
         {
             clipStart = start; clipEnd = end;
@@ -91,13 +99,17 @@ namespace RewindRampage
             while (frameCursor + 1 < recording.Frames.Count && recording.Frames[frameCursor + 1].Time <= time) frameCursor++;
             ReplayFrame a = recording.Frames[frameCursor];
             ReplayFrame b = recording.Frames[Mathf.Min(frameCursor + 1, recording.Frames.Count - 1)];
-            root.position = Vector2.Lerp(a.Position, b.Position, Mathf.InverseLerp(a.Time, b.Time, time));
+            bool jump = IsJump(a, b);
+            root.position = jump ? a.Position : Vector2.Lerp(a.Position, b.Position, Mathf.InverseLerp(a.Time, b.Time, time));
             IsRewinding = a.IsRewinding;
-            Vector2 direction = b.Position - a.Position;
+            Vector2 direction = visualOnly && a.Facing.sqrMagnitude > 0.001f ? a.Facing : b.Position - a.Position;
             if (direction.sqrMagnitude > 0.000001f)
                 body.transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f);
             int first = recording.FindFrame(Mathf.Max(clipStart, time - 3f));
             if (recording.Frames[first].Time < clipStart) first++;
+            if (visualOnly)
+                for (int i = first + 1; i <= frameCursor; i++)
+                    if (IsJump(recording.Frames[i - 1], recording.Frames[i])) first = i;
             history.positionCount = frameCursor - first + 2;
             for (int i = first; i <= frameCursor; i++) history.SetPosition(i - first, recording.Frames[i].Position);
             history.SetPosition(history.positionCount - 1, Position);
@@ -114,13 +126,14 @@ namespace RewindRampage
             visualTime += deltaTime;
             flashRemaining = Mathf.Max(0f, flashRemaining - deltaTime);
             targetPulse = Mathf.Max(0f, targetPulse - deltaTime);
-            body.color = flashRemaining > 0f ? Color.white : ReplayVisuals.Magenta;
-            body.transform.localPosition = new Vector3(Mathf.Sin(visualTime * 47f) * 0.018f, 0f, 0f);
+            Color recordedColor = visualOnly ? new Color(0.67f, 0.59f, 0.82f, 0.8f) : ReplayVisuals.Magenta;
+            body.color = flashRemaining > 0f ? Color.white : recordedColor;
+            body.transform.localPosition = visualOnly ? Vector3.zero : new Vector3(Mathf.Sin(visualTime * 47f) * 0.018f, 0f, 0f);
             doubleOutline.enabled = Interference;
             doubleOutline.transform.localPosition = new Vector3(0.16f + Mathf.Sin(visualTime * 23f) * 0.08f, -0.04f, 0f);
             doubleOutline.transform.localRotation = body.transform.localRotation;
             doubleOutline.color = new Color(1f, 0.5f, 0.55f, 0.2f * presentationOpacity);
-            Color color = IsFrozen ? GameArt.Gold : ReplayVisuals.Magenta;
+            Color color = IsFrozen || (visualOnly && IsRewinding) ? visualOnly ? EndlessVisuals.RewindColor : GameArt.Gold : recordedColor;
             color.a = IsWarning ? 0.3f + 0.7f * Mathf.Abs(Mathf.Sin(visualTime * 19f)) : 0.65f;
             ring.color = Color.Lerp(color, Color.white, targetPulse * 2f);
             color.a = IsRewinding ? 0.5f : 0.25f;
@@ -129,7 +142,7 @@ namespace RewindRampage
             color = halo.color; color.a *= presentationOpacity; halo.color = color;
             color = ring.color; color.a *= presentationOpacity; ring.color = color;
             ring.transform.localScale = Vector3.one * (targetLocked ? 1.8f : 1.45f) * (1f + targetPulse * 0.2f);
-            history.startColor = history.endColor = new Color(0.5f, 0.12f, 0.45f, 0.4f * presentationOpacity);
+            history.startColor = history.endColor = visualOnly ? new Color(0.67f, 0.59f, 0.82f, 0.35f * presentationOpacity) : new Color(0.5f, 0.12f, 0.45f, 0.4f * presentationOpacity);
         }
 
         public void SetPresentationOpacity(float opacity, bool locked = false)
@@ -139,6 +152,8 @@ namespace RewindRampage
         }
 
         public void FlashHit() { flashRemaining = 0.2f; }
+        private bool IsJump(ReplayFrame a, ReplayFrame b) => visualOnly && Vector2.Distance(a.Position, b.Position) >
+            maximumRecordedSpeed * Mathf.Max(0f, b.Time - a.Time) * 1.5f + 0.25f;
         public void HighlightTarget() { targetPulse = 0.5f; }
         public void StopPlayback() { root.gameObject.SetActive(false); IsWarning = false; }
         public void ClearRecording() { StopPlayback(); recording = null; frameCursor = 0; }

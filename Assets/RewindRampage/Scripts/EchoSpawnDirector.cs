@@ -110,6 +110,6 @@ namespace RewindRampage
             for (int i = 0; i < echoes.Count; i++) echoes[i].SetStoryPresentation(opacity, offset * (i % 2 == 0 ? 1f : -1f));
         }
         public void Stop() { foreach (EchoAIController echo in echoes) echo.Despawn(); spawnWait = 0f; }
-        public void Dispose() { UnityEngine.Object.Destroy(warningMaterial); UnityEngine.Object.Destroy(warningTexture); }
+        public void Dispose() { EndlessVisuals.Release(warningMaterial); EndlessVisuals.Release(warningTexture); }
     }
 }

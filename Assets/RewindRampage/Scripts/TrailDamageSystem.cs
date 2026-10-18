@@ -18,6 +18,8 @@ namespace RewindRampage
         public int KillCount { get; private set; }
         public int Score { get; private set; }
         public int RewindId { get; private set; }
+        public int AttackHitCount { get; private set; }
+        public event Action<int> AttackComboChanged;
         public void SetBossTarget(GhostBossHealth boss) { ghostBoss = boss; }
         public void SetArchiveTarget(Act3Director director) { archive = director; }
 
@@ -42,6 +44,8 @@ namespace RewindRampage
             hitEnemyIds.Clear();
             KillCount = 0;
             Score = 0;
+            AttackHitCount = 0;
+            AttackComboChanged?.Invoke(0);
         }
 
         public void Sweep(Vector2 from, Vector2 to)
@@ -64,6 +68,7 @@ namespace RewindRampage
         {
             if (!attackActive || context.RewindId != RewindId) return;
             if (!enemy.IsAlive || !enemy.IsArmed || amount <= 0 || !hitEnemyIds.Add(enemy.SpawnId)) return;
+            RegisterTargetHit();
             enemy.TakeDamage(amount, context);
         }
 
@@ -83,6 +88,12 @@ namespace RewindRampage
 
         private void OnEnemyDeath(EnemyController enemy, DamageContext context)
         {
+            if (context.Source == DamageSource.FieldMechanic)
+            {
+                // Reuse the ordinary base kill reward, without changing the current rewind combo.
+                onKill(new RewindKill(enemy.Position, 100, 1, DamageSource.FieldMechanic, 0));
+                return;
+            }
             if (!attackActive || context.RewindId != RewindId) return;
             RegisterKill(enemy.Position, context.Source, context.ChainId);
             if (!enemy.IsVolatile || (!tuning.enableChainExplosions && context.Source == DamageSource.VolatileExplosion)) return;
@@ -93,7 +104,21 @@ namespace RewindRampage
 
         public void RegisterArchiveKill(Vector2 position, DamageSource source)
         {
-            if (attackActive) RegisterKill(position, source, 0);
+            if (attackActive) { RegisterTargetHit(); RegisterKill(position, source, 0); }
+        }
+
+        // Only accepted player hits call this. Normal enemies use hitEnemyIds; the recorded
+        // self, Echoes and core already deduplicate accepted hits by the same rewind action ID.
+        public void RegisterTargetHit()
+        {
+            if (!attackActive) return;
+            AttackHitCount++;
+            AttackComboChanged?.Invoke(AttackHitCount);
+        }
+
+        public void HitFromMechanic(EnemyController enemy, int attackId)
+        {
+            if (enemy.IsAlive && enemy.IsArmed) enemy.TakeDamage(1, new DamageContext(DamageSource.FieldMechanic, attackId));
         }
 
         private void RegisterKill(Vector2 position, DamageSource source, int chainId)
@@ -121,11 +146,13 @@ namespace RewindRampage
             EndAttack();
             hitEnemyIds.Clear();
             KillCount = Score = 0;
+            AttackHitCount = 0;
         }
 
         public void Dispose()
         {
             EndAttack();
+            AttackComboChanged = null;
             enemies.EnemyCreated -= RegisterEnemy;
             for (int i = 0; i < enemies.Enemies.Count; i++)
                 if (enemies.Enemies[i] != null) enemies.Enemies[i].OnDeath -= OnEnemyDeath;

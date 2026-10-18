@@ -57,6 +57,7 @@ namespace RewindRampage
         [Min(0f)] public float replayClipProtection = 0.5f;
 
         [Header("Act III / Archive")]
+        [Range(0.35f, 1f)] public float storyPlaybackSpeed = 0.65f;
         [Min(1)] public int archivePlayerHealth = 3;
         [Min(1)] public int archiveEchoHealth = 1;
         [Min(0.1f)] public float archiveEchoSpeed = 2.4f;

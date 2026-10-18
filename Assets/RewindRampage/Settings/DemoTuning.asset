@@ -51,6 +51,7 @@ MonoBehaviour:
   ghostBossInvulnerability: 0.7
   replayWarningLead: 0.5
   replayClipProtection: 0.5
+  storyPlaybackSpeed: 0.65
   archivePlayerHealth: 3
   archiveEchoHealth: 1
   archiveEchoSpeed: 2.4

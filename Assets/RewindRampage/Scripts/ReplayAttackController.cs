@@ -245,8 +245,8 @@ namespace RewindRampage
 
         public void Dispose()
         {
-            UnityEngine.Object.Destroy(dashedMaterial);
-            UnityEngine.Object.Destroy(dashTexture);
+            EndlessVisuals.Release(dashedMaterial);
+            EndlessVisuals.Release(dashTexture);
         }
 
         public void ClearRecording()

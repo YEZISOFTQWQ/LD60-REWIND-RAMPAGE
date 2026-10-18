@@ -99,6 +99,6 @@ namespace RewindRampage
         }
 
         public void Clear() { foreach (LineRenderer span in spans) span.enabled = false; endpoint.enabled = false; points.Clear(); }
-        public void Dispose() { UnityEngine.Object.Destroy(dashed); UnityEngine.Object.Destroy(texture); }
+        public void Dispose() { EndlessVisuals.Release(dashed); EndlessVisuals.Release(texture); }
     }
 }

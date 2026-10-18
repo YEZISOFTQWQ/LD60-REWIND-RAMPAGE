@@ -98,7 +98,7 @@ namespace RewindRampage
 
         public bool TickEnding(float deltaTime)
         {
-            EndingElapsed = Mathf.Min(EndingDuration, EndingElapsed + deltaTime);
+            EndingElapsed = Mathf.Min(EndingDuration, EndingElapsed + deltaTime * tuning.storyPlaybackSpeed);
             return EndingElapsed >= EndingDuration;
         }
 

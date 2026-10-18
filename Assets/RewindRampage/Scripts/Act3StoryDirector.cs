@@ -102,7 +102,7 @@ namespace RewindRampage
 
         public bool TickOpening(float deltaTime)
         {
-            OpeningElapsed = Mathf.Min(OpeningDuration, OpeningElapsed + deltaTime);
+            OpeningElapsed = Mathf.Min(OpeningDuration, OpeningElapsed + deltaTime * tuning.storyPlaybackSpeed);
             if (!collisionApplied && OpeningElapsed >= CollisionAt)
             {
                 collisionApplied = true;
@@ -160,7 +160,7 @@ namespace RewindRampage
 
         public bool TickEnding(float deltaTime)
         {
-            EndingElapsed += deltaTime;
+            EndingElapsed += deltaTime * tuning.storyPlaybackSpeed;
             if (IsVictory && EndingElapsed >= 7f)
             {
                 Vector2 destination = tuning.ClampToArena(endPosition + Vector2.up * 0.7f, tuning.playerRadius);

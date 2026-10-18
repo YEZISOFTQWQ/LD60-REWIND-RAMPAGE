@@ -16,16 +16,16 @@ namespace RewindRampage
 
         public RunRecorder(float interval) { this.interval = interval; }
 
-        public void StartRecording(Vector2 position)
+        public void StartRecording(Vector2 position, Vector2 facing = default)
         {
             ClearRecording();
             IsRecording = true;
-            observation = new ReplayFrame(0f, position, false);
+            observation = new ReplayFrame(0f, position, false, facing);
             frames.Add(observation);
             nextSample = interval;
         }
 
-        public void RecordFrame(Vector2 position, float time, bool rewinding, bool exactCorner = false)
+        public void RecordFrame(Vector2 position, float time, bool rewinding, bool exactCorner = false, Vector2? facing = null)
         {
             if (!IsRecording || time < observation.Time - 0.000001f) return;
             float duration = time - observation.Time;
@@ -33,13 +33,13 @@ namespace RewindRampage
             {
                 float fraction = duration > 0f ? Mathf.Clamp01((nextSample - observation.Time) / duration) : 1f;
                 AddFrame(new ReplayFrame(Mathf.Min(nextSample, time), Vector2.Lerp(observation.Position, position, fraction),
-                    nextSample < time - 0.000001f ? observation.IsRewinding : rewinding));
+                    nextSample < time - 0.000001f ? observation.IsRewinding : rewinding, facing ?? observation.Facing));
                 nextSample += interval;
             }
             // Preserve rewind corners and exact state transitions between regular 50 Hz samples.
             if (exactCorner || rewinding != observation.IsRewinding)
-                AddFrame(new ReplayFrame(time, position, rewinding));
-            observation = new ReplayFrame(time, position, rewinding);
+                AddFrame(new ReplayFrame(time, position, rewinding, facing ?? observation.Facing));
+            observation = new ReplayFrame(time, position, rewinding, facing ?? observation.Facing);
         }
 
         private void AddFrame(ReplayFrame frame)
