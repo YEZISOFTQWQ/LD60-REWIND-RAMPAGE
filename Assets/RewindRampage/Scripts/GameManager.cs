@@ -44,6 +44,7 @@ namespace RewindRampage
         private int lastHeight;
         private Vector2 movementStart;
         private Vector2 playbackEntryPosition;
+        private bool bossAffectionUsed;
 
         public SessionState State { get; private set; }
         public GameAct Act { get; private set; }
@@ -144,13 +145,17 @@ namespace RewindRampage
             if (Input.GetKeyDown(KeyCode.M)) ToggleMute();
             if (Input.GetKeyDown(KeyCode.F2)) ToggleInvincibility();
             if (Input.GetKeyDown(KeyCode.F4)) UnlockEndlessMode();
-            if (Input.GetKeyDown(KeyCode.F5)) { StartEndlessP7Test(); return; }
+            if (Input.GetKeyDown(KeyCode.F8)) { StartEndlessP7Test(); return; }
             if (State == SessionState.Title || State == SessionState.Results)
             {
                 if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return)) ActivatePrimary();
             }
             else if (Input.GetKeyDown(KeyCode.Escape)) TogglePause();
-            else if (State == SessionState.Playing) TickGame(Time.deltaTime);
+            else if (State == SessionState.Playing)
+            {
+                TickBossInteraction(Time.deltaTime);
+                TickGame(Time.deltaTime);
+            }
 
             float effectDelta = State == SessionState.Paused ? 0f : Time.deltaTime;
             bool frozen = CinematicFreeze;
@@ -163,6 +168,32 @@ namespace RewindRampage
             act3Story.Present(State == SessionState.Playing ? worldDelta : 0f);
             hud.Tick(Time.unscaledDeltaTime);
             story.Present(State == SessionState.Playing ? Time.deltaTime : 0f, Elapsed, State == SessionState.Playing);
+        }
+
+        private void TickBossInteraction(float deltaTime)
+        {
+            if (State != SessionState.Playing || !InEndless || player.Health <= 0 || endless?.Boss?.Visual == null) return;
+            endless.Boss.Visual.TickInteraction(deltaTime);
+            // Sample once per rendered frame, never once per 20ms simulation slice.
+            if (Input.GetMouseButtonDown(0)) TryPetBoss(Input.mousePosition);
+        }
+
+        public BossClickReaction TryPetBoss(Vector2 screenPosition)
+        {
+            if (State != SessionState.Playing || !InEndless || player.Health <= 0 || CinematicFreeze ||
+                endless?.IsRunning != true || endless.Boss?.Visual == null || !arenaCamera.pixelRect.Contains(screenPosition))
+                return BossClickReaction.None;
+            TapeBossVisual boss = endless.Boss.Visual;
+            Ray ray = arenaCamera.ScreenPointToRay(screenPosition);
+            Plane plane = new Plane(Vector3.forward, boss.Root.position);
+            if (!plane.Raycast(ray, out float distance)) return BossClickReaction.None;
+            BossClickReaction reaction = boss.ReactToClick(ray.GetPoint(distance), !bossAffectionUsed);
+            if (reaction == BossClickReaction.Affection)
+            {
+                bossAffectionUsed = true;
+                player.RestoreFullHealth();
+            }
+            return reaction;
         }
 
         private void TickGame(float deltaTime)
@@ -525,6 +556,7 @@ namespace RewindRampage
 
         private void StartEndless()
         {
+            bossAffectionUsed = false;
             coreSequence?.Reset();
             act3Story.Stop(); act2Story.Stop(); story.Stop(); SetArenaScale(1f);
             archive.Reset(); duel.Reset(); feedback.ResetFeedback(); rewind.Reset(); spawner.ResetEnemies(); player.ResetPlayer();

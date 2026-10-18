@@ -9,6 +9,15 @@ namespace RewindRampage.Editor
 {
     public static class TapeTransportPreview
     {
+        public static void RenderAmberDeck()
+        {
+            AmberDeckFinish.Apply();
+            UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity");
+            foreach (Vector2Int size in new[] { new Vector2Int(1600, 1000), new Vector2Int(1280, 720), new Vector2Int(1024, 768) })
+                for (int state = 0; state <= 1; state++) Render(size.x, size.y, state, "AmberDeck-" + size.x + "x" + size.y + "-" + state + ".png");
+            Render(1600, 1000, 3, "AmberDeck-1600x1000-AllLamps.png");
+            UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene, UnityEditor.SceneManagement.NewSceneMode.Single);
+        }
         public static void RenderP7Hud()
         {
             UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity");
@@ -39,7 +48,7 @@ namespace RewindRampage.Editor
                     Render(size.x, size.y, state, "V072-" + size.x + "x" + size.y + "-State" + state + ".png");
         }
 
-        private static void Render(int width, int height, int state, string name)
+        internal static void Render(int width, int height, int state, string name, bool residualProbe = false, bool expectedCleared = true)
         {
             bool reverse = state == 1 || state == 2 || state == 7 || state == 9;
             RewindHud source = UnityEngine.Object.FindObjectOfType<RewindHud>(true);
@@ -71,7 +80,7 @@ namespace RewindRampage.Editor
                 SerializedObject data = new SerializedObject(clone.GetComponent<RewindHud>());
                 SerializedProperty view = data.FindProperty("view");
                 foreach (string field in new[] { "menu", "duelOverlay", "bootOverlay" })
-                    ((GameObject)view.FindPropertyRelative(field).objectReferenceValue).SetActive(false);
+                    ((GameObject)view.FindPropertyRelative(field).objectReferenceValue).SetActive(field == "menu" && state == 11);
                 ((CanvasGroup)view.FindPropertyRelative("rewindOverlay").objectReferenceValue).gameObject.SetActive(false);
                 foreach (CanvasGroup fade in clone.GetComponentsInChildren<CanvasGroup>(true)) fade.alpha = 1f;
                 TapeTransportHud transport = (TapeTransportHud)view.FindPropertyRelative("tapeTransport").objectReferenceValue;
@@ -82,18 +91,19 @@ namespace RewindRampage.Editor
                 cloneHud.ShowStoryMessage("SUBJECT MOVEMENT DETECTED.\nTEMPORAL TRACE ESTABLISHED.\nOBSERVATION CONTINUES.", 5f);
                 TextMeshProUGUI terminal = (TextMeshProUGUI)view.FindPropertyRelative("storyMessage").objectReferenceValue;
                 terminal.maxVisibleCharacters = int.MaxValue; terminal.alpha = 0.75f;
+                if (state == 11) terminal.gameObject.SetActive(false);
                 SerializedProperty samples = view.FindPropertyRelative("tapeSegments");
                 for (int i = 0; i < samples.arraySize; i++)
-                    ((UnityEngine.UI.Image)samples.GetArrayElementAtIndex(i).objectReferenceValue).color = i < 22 ? reverse ? GameArt.Gold : GameArt.Cyan : new Color(0.1f, 0.18f, 0.22f);
+                    ((UnityEngine.UI.Image)samples.GetArrayElementAtIndex(i).objectReferenceValue).color = i < 22 ? TapeTransportHud.Phosphor : TapeTransportHud.EmptyBuffer;
                 ArenaClockHud clock = UnityEngine.Object.FindObjectOfType<ArenaClockHud>();
-                clock.Display(reverse ? 61.234f : 58f, reverse ? 1f : 0f, reverse ? 1f : 0f, 1f, 1f);
+                clock.Display(reverse ? 61.234f : 58f, reverse ? 1f : 0f, reverse ? 1f : 0f, state == 11 ? 0f : 1f, 1f);
                 ((TextMeshProUGUI)view.FindPropertyRelative("abilityLabel").objectReferenceValue).text =
                     state == 2 ? "<<< RECONSTRUCTING" : state == 3 ? "RECHARGING" : reverse ? "<<< REWINDING / 5x" : "MOVE TO RECORD";
                 if (state >= 4 && state < 8) ((TextMeshProUGUI)view.FindPropertyRelative("abilityLabel").objectReferenceValue).text =
                     new[] { "TRACK LOCK", "COMPOSITE ATTACK", "BAD SECTORS", "<< REWIND" }[state - 4];
                 ((TextMeshProUGUI)view.FindPropertyRelative("tapeTime").objectReferenceValue).text =
                     state == 2 ? "<< CAPTURE 30.0s / 30.0s" : state == 3 ? "COOLDOWN 2.0s" : reverse ? "<< 2.2s / 3.0s" : "2.2s / 3.0s";
-                if (state >= 9)
+                if (state == 9 || state == 10)
                 {
                     clock.DisplayBossRta(144.39f, 1f, reverse, 7, reverse ? "FORCED REWIND" : "REMEMBER.");
                     ((TextMeshProUGUI)view.FindPropertyRelative("abilityLabel").objectReferenceValue).text = reverse ? "MEMORY LOCK / << REW" : "REMEMBER.";
@@ -117,12 +127,39 @@ namespace RewindRampage.Editor
                     }
                 }
                 ValidateLayout(transport, view, name);
+                if (name.StartsWith("V0100"))
+                {
+                    TMP_Text header = clone.transform.Find("Game name").GetComponent<TMP_Text>();
+                    TMP_Text score = (TMP_Text)view.FindPropertyRelative("score").objectReferenceValue;
+                    foreach (TMP_Text text in new[] { header, score })
+                    {
+                        text.ForceMeshUpdate();
+                        if (text.font.name != "TubeDisplay" || text.textInfo.lineCount != 1 || text.GetPreferredValues(text.text).x > text.rectTransform.rect.width)
+                            throw new InvalidOperationException("Tube header must remain an unclipped single line: " + text.name);
+                    }
+                    foreach (string plate in new[] { "Minimal header background", "Minimal transport background" })
+                    {
+                        var image = clone.transform.Find(plate).GetComponent<UnityEngine.UI.Image>();
+                        if (!image.gameObject.activeSelf || image.color.a != 1f) throw new InvalidOperationException("Outer viewport requires opaque dark redraw: " + plate);
+                    }
+                    foreach (string field in new[] { "menuTag", "menuInstructions", "menuStats" })
+                        if (((Component)view.FindPropertyRelative(field).objectReferenceValue).gameObject.activeSelf) throw new InvalidOperationException("Title annotations must be hidden.");
+                    Debug.Log("PASS 0.10.0 HEADER/MENU: " + name);
+                }
                 foreach (TMP_Text text in clone.GetComponentsInChildren<TMP_Text>(true)) if (text.gameObject.activeInHierarchy) text.ForceMeshUpdate();
                 Canvas.ForceUpdateCanvases();
-                RenderTexture.active = target; GL.Clear(true, true, original.backgroundColor);
+                RenderTexture.active = target; GL.Clear(true, true, residualProbe ? GameArt.Gold : original.backgroundColor);
                 camera.Render(); overlay.Render(); RenderTexture.active = target;
                 pixels = new Texture2D(width, height, TextureFormat.RGB24, false);
                 pixels.ReadPixels(new Rect(0f, 0f, width, height), 0, 0); pixels.Apply();
+                if (residualProbe)
+                {
+                    bool cleared = true;
+                    foreach (Vector2Int p in new[] { new Vector2Int(5,5), new Vector2Int(width-6,5), new Vector2Int(5,height-6), new Vector2Int(width-6,height-6) })
+                    { Color sample = pixels.GetPixel(p.x,p.y); cleared &= Mathf.Max(sample.r,sample.g,sample.b) < 0.1f; }
+                    if (cleared != expectedCleared) throw new InvalidOperationException("Residual probe mismatch: " + name);
+                    Debug.Log("PASS RESIDUAL PROBE: " + name + (cleared ? " - normal HUD redraw removes prior gold pixels above/below arena." : " - removal reproduces retained gold pixels outside arena camera."));
+                }
                 string folder = Path.GetFullPath(Path.Combine(Application.dataPath, "../Logs"));
                 Directory.CreateDirectory(folder); File.WriteAllBytes(Path.Combine(folder, name), pixels.EncodeToPNG());
                 Debug.Log("Static UI artwork saved: " + name + ". No Play Mode or gameplay tests.");

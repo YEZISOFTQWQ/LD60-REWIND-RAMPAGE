@@ -7,10 +7,15 @@ namespace RewindRampage
     [RequireComponent(typeof(CanvasRenderer))]
     public sealed class TapeTransportHud : UnityEngine.UI.MaskableGraphic
     {
-        private static readonly Color Case = new Color(0.067f, 0.10f, 0.12f, 0.98f);
-        private static readonly Color Well = new Color(0.027f, 0.047f, 0.055f);
-        private static readonly Color Edge = new Color(0.23f, 0.37f, 0.41f);
-        private static readonly Color Ice = new Color(0.66f, 0.85f, 0.89f);
+        private static readonly Color Case = new Color(0.17f, 0.125f, 0.083f, 0.98f);
+        private static readonly Color Well = new Color(0.026f, 0.019f, 0.013f);
+        private static readonly Color Edge = new Color(0.46f, 0.34f, 0.21f);
+        public static readonly Color Phosphor = new Color(1f, 0.76f, 0.32f);
+        public static readonly Color Readout = new Color(0.83f, 0.59f, 0.28f);
+        public static readonly Color Unlit = new Color(0.34f, 0.23f, 0.13f);
+        public static readonly Color EmptyBuffer = new Color(0.15f, 0.095f, 0.045f);
+        public static readonly Color LostIntegrity = new Color(0.22f, 0.13f, 0.055f, 0.55f);
+        private static readonly Color RecordLight = new Color(1f, 0.34f, 0.16f);
         [SerializeField] private TextMeshProUGUI[] lampLabels;
         private float fraction, supplyAngle = 25f, takeupAngle = 25f, flow, reverseMix;
         private float lampVisibility = 1f, lampBrightness = 1f;
@@ -49,8 +54,8 @@ namespace RewindRampage
                 for (int i = 0; i < lampLabels.Length; i++)
                 {
                     bool lit = locked || ((int)lamps & (1 << i)) != 0;
-                    Color tone = i == 0 ? GameArt.Red : Ice;
-                    tone = lit ? tone : new Color(0.33f, 0.46f, 0.49f);
+                    Color tone = i == 0 ? RecordLight : Phosphor;
+                    tone = lit ? tone : Unlit;
                     tone.a = visibility * (lit ? (locked || i == 1 ? 1f : brightness) : 0.65f);
                     lampLabels[i].color = tone;
                 }
@@ -78,14 +83,14 @@ namespace RewindRampage
             if (width < 10f || height < 10f) return;
             // A fixed reference layout keeps the reference machine's proportions on every screen.
             const float middle = 220f, supplyX = 110f, takeupX = 326f;
-            Color accent = Color.Lerp(Ice, GameArt.Gold, reverseMix);
+            Color accent = Color.Lerp(new Color(0.75f, 0.62f, 0.40f), Phosphor, reverseMix);
             Rounded(new Rect(0f, 16f, 440f, 186f), 3f, Edge);
             Rounded(new Rect(1.5f, 17.5f, 437f, 183f), 2f, Case);
             Rounded(new Rect(14f, 42f, 412f, 128f), 2f, Edge * new Color(1f, 1f, 1f, 0.8f));
             Rounded(new Rect(15.3f, 43.3f, 409.4f, 125.4f), 1f, Well);
             // Both spools feed one continuous tape through the central read/write head.
-            Segment(new Vector2(supplyX, 106f), new Vector2(takeupX, 106f), 9f, new Color(0.40f, 0.47f, 0.43f));
-            Segment(new Vector2(supplyX, 106f), new Vector2(takeupX, 106f), 2.5f, new Color(0.68f, 0.71f, 0.56f));
+            Segment(new Vector2(supplyX, 106f), new Vector2(takeupX, 106f), 9f, new Color(0.25f, 0.15f, 0.075f));
+            Segment(new Vector2(supplyX, 106f), new Vector2(takeupX, 106f), 2.5f, new Color(0.66f, 0.46f, 0.22f));
             for (int i = 0; i < 8; i++)
             {
                 float x = Mathf.Lerp(supplyX + 46f, takeupX - 60f, Mathf.Repeat(i / 8f + flow, 1f));
@@ -94,16 +99,16 @@ namespace RewindRampage
             Reel(new Vector2(supplyX, 106f), 46f, 1f - fraction, supplyAngle);
             Reel(new Vector2(takeupX, 106f), 60f, fraction, takeupAngle);
             Rounded(new Rect(middle - 17f, 79f, 34f, 54f), 2f, accent * new Color(1f, 1f, 1f, 0.85f));
-            Rounded(new Rect(middle - 15.4f, 80.6f, 30.8f, 50.8f), 1f, new Color(0.14f, 0.21f, 0.24f));
+            Rounded(new Rect(middle - 15.4f, 80.6f, 30.8f, 50.8f), 1f, new Color(0.19f, 0.13f, 0.075f));
             Rounded(new Rect(middle - 9f, 89f, 18f, 34f), 1f, accent);
-            Rounded(new Rect(middle - 11f, 141f, 22f, 3.5f), 0.5f, reverseMix > 0.1f ? GameArt.Gold : new Color(0.86f, 0.46f, 0.49f));
+            Rounded(new Rect(middle - 11f, 141f, 22f, 3.5f), 0.5f, reverseMix > 0.1f ? Phosphor : RecordLight);
             // Readouts have their own rail, outside the four lamp cells.
             Rounded(new Rect(LampBankStart, 16f, width - LampBankStart, 42f), 2f, Edge);
             Rounded(new Rect(LampBankStart + 1f, 17f, width - LampBankStart - 2f, 40f), 1f, Well);
             for (int i = 0; i < 4; i++)
             {
                 bool lit = locked || ((int)lamps & (1 << i)) != 0;
-                Color tone = i == 0 ? GameArt.Red : Ice;
+                Color tone = i == 0 ? RecordLight : Phosphor;
                 float brightness = locked || i == 1 ? 1f : lampBrightness;
                 Color frame = lit ? Color.Lerp(Edge, tone, 0.25f) : Edge;
                 frame.a = lampVisibility * (lit ? 0.95f : 0.55f);
@@ -113,17 +118,19 @@ namespace RewindRampage
                 Rounded(cell, 2f, frame);
                 Rounded(new Rect(x + 1.5f, y + 1.5f, keyWidth - 3f, cell.height - 3f), 1f, Well);
                 Rounded(new Rect(x + 3f, y + 5f, keyWidth - 6f, cell.height - 8f), 1f,
-                    new Color(0.08f, 0.12f, 0.14f, lampVisibility));
+                    new Color(0.057f, 0.036f, 0.022f, lampVisibility));
                 Rounded(new Rect(x + 6f, cell.yMax - 6f, keyWidth - 12f, 1f), 0f, frame);
                 Rounded(new Rect(x + 6f, y + 4f, keyWidth - 12f, 3f), 0f,
-                    new Color(0.01f, 0.025f, 0.03f, lampVisibility));
+                    new Color(0.012f, 0.008f, 0.005f, lampVisibility));
                 Vector2 symbol = cell.center + new Vector2(-65f, 7f);
-                Color light = tone; light.a = lampVisibility * (lit ? brightness * 0.72f : 0.08f);
+                Color light = tone; light.a = lampVisibility * (lit ? brightness * 0.96f : 0.08f);
                 Rounded(new Rect(x + 18f, y + 11f, keyWidth - 36f, 3f), 0f, light);
                 if (lit)
                 {
-                    light.a *= 0.08f;
+                    light.a *= 0.075f;
                     Rounded(new Rect(x + 14f, y + 6f, keyWidth - 28f, 13f), 1f, light);
+                    light.a *= 1.5f;
+                    Rounded(new Rect(x + 16f, y + 9f, keyWidth - 32f, 7f), 1f, light);
                 }
                 tone.a = lampVisibility * (lit ? brightness : 0.22f);
                 // Transport symbols match a physical cassette deck.
@@ -145,10 +152,10 @@ namespace RewindRampage
             {
                 Disc(center, radius, Edge);
                 Disc(center, radius - 2f, Well);
-                Disc(center, radius - 5f, new Color(0.46f, 0.58f, 0.61f));
-                Disc(center, radius - 7f, new Color(0.18f, 0.24f, 0.27f));
+                Disc(center, radius - 5f, new Color(0.55f, 0.45f, 0.31f));
+                Disc(center, radius - 7f, new Color(0.21f, 0.16f, 0.105f));
                 float tapeRadius = Mathf.Sqrt(Mathf.Lerp(16f * 16f, (radius - 9f) * (radius - 9f), winding));
-                Disc(center, tapeRadius, new Color(0.25f, 0.31f, 0.32f));
+                Disc(center, tapeRadius, new Color(0.29f, 0.215f, 0.13f));
                 for (int i = 0; i < 3; i++)
                 {
                     float rotation = (angle + i * 120f) * Mathf.Deg2Rad;
@@ -184,12 +191,17 @@ namespace RewindRampage
                     for (int step = 0; step <= steps; step++)
                     {
                         float angle = (corner * 90f + step * 90f / steps) * Mathf.Deg2Rad;
-                        Vertex(cornerCenter + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius, tone);
+                        Vector2 point = cornerCenter + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+                        float sheen = Mathf.Lerp(0.76f, 1.18f, Mathf.InverseLerp(area.yMin, area.yMax, point.y));
+                        // Only the casing/glass is shaded; the illuminated phosphor stays even.
+                        Color shaded = Color.Lerp(new Color(tone.r * sheen, tone.g * sheen, tone.b * sheen, tone.a), tone,
+                            Mathf.InverseLerp(0.65f, 0.9f, Mathf.Max(tone.r, tone.g, tone.b)));
+                        Vertex(point, shaded);
                     }
                 }
                 for (int i = 0; i < edgeCount; i++) mesh.AddTriangle(start, start + 1 + i, start + 1 + (i + 1) % edgeCount);
             }
-            void Vertex(Vector2 point, Color tone) { mesh.AddVert(point + bounds.min, tone * color, Vector2.zero); }
+            void Vertex(Vector2 point, Color tone) { mesh.AddVert(point + bounds.min, tone * color, point); }
         }
     }
 }

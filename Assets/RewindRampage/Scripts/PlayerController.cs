@@ -79,6 +79,13 @@ namespace RewindRampage
         // One authored event; combat immunity and debug god mode do not suppress it.
         public void ApplyStoryDamage(int amount) { Health = Mathf.Max(0, Health - Mathf.Max(0, amount)); }
 
+        public bool RestoreFullHealth()
+        {
+            if (Health <= 0 || Health >= tuning.startingHealth) return false;
+            Health = tuning.startingHealth;
+            return true;
+        }
+
         public void UpdateVisual(float time, bool rewinding, float cooldownFraction, bool ready, bool forced = false)
         {
             Color color = forced ? EndlessVisuals.RewindColor : rewinding ? GameArt.Gold : GameArt.Cyan;

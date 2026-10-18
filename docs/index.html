@@ -6,12 +6,13 @@
   <meta name="theme-color" content="#080f18">
   <meta name="description" content="REWIND RAMPAGE: survive REC, erase your past in PLAYBACK, and break the time core in THE ARCHIVE. Three acts of rewind combat.">
   <title>REWIND RAMPAGE — YEZISOFTQWQ</title>
+  <link rel="icon" type="image/png" sizes="256x256" href="TemplateData/icon.png">
   <link rel="stylesheet" href="TemplateData/style.css">
 </head>
 <body>
   <main>
     <header>
-      <div class="brand"><span class="mark" aria-hidden="true">&lt;&lt;</span><div><h1>REWIND <span>RAMPAGE</span></h1><p>TAPE 004 / OLD TECH / DEMO v0.9.4</p></div></div>
+      <div class="brand"><span class="mark" aria-hidden="true">&lt;&lt;</span><div><h1>REWIND <span>RAMPAGE</span></h1><p>TAPE 004 / OLD TECH / v1.0.0</p></div></div>
       <button id="fullscreen" type="button">FULLSCREEN <span aria-hidden="true">↗</span></button>
     </header>
     <section class="player" aria-label="Play REWIND RAMPAGE">
@@ -19,15 +20,91 @@
       <div id="loading" role="status" aria-live="polite"><div class="loading-mark">&lt;&lt;</div><h2>THREADING THE TAPE</h2><p id="progress-label">Loading the tape deck...</p><div class="progress"><span id="progress-fill"></span></div></div>
       <div id="error" role="alert" hidden></div>
     </section>
-    <footer>
-      <p><kbd>W A S D</kbd> MOVE / RECORD <span>·</span> <kbd>SPACE</kbd> REWIND / ATTACK <span>·</span> <kbd>ESC</kbd> PAUSE <span>·</span> <kbd>M</kbd> SOUND</p>
-      <p><kbd>F2</kbd> GOD MODE / OFF BY DEFAULT. Press again to disable.</p>
-      <p><kbd>F5</kbd> MASTER TAPE TEST / Start the final trial of its first performance. God mode remains off unless enabled separately.</p>
-      <p>ACT I / RECORD. The centered arena clock turns red and reveals milliseconds after 01:00. The tape reels reverse when you rewind.</p>
-      <p>ACT II / Replay the final 30 seconds of your REC run at 1x speed. Follow the purple two-second preview, dodge intermittent fire, and erase the ghost with one rewind hit. Its recorded attacks are harmless.</p>
-      <p>ACT III / THE ARCHIVE. Break the core after 00:30, then survive until 00:00.</p>
-      <p>ENDLESS MODE / Clear the story to unlock, or press <kbd>F4</kbd> for testing. Survive BULLET STORM, rewind DETONATION, then learn four field mechanics in MECHANIC RUSH. Rewinding reverses the field clock, mechanisms and visual replay. The invulnerable MASTER TAPE combines track locks, moving sweep gaps, ordered sector waves and advancing overwrite strips. MEMORY LOCK forces you back along your real history: remember the attack, because its replay has no advance warning. As OVERLOAD intensifies, combined attacks and memory trials continue with more pursuers. The same Boss and reversible timer persist until your recording ends.</p>
-      <p>Your past is your weapon.<span class="credit">BY YEZISOFTQWQ</span></p>
+    <footer class="game-guide">
+      <section class="guide-section" aria-labelledby="controls-heading">
+        <h2 id="controls-heading">CONTROLS</h2>
+        <dl class="controls-grid">
+          <div><dt><kbd>WASD</kbd></dt><dd>Move / Record your path</dd></div>
+          <div><dt><kbd>SPACE</kbd></dt><dd>Rewind / Attack</dd></div>
+          <div><dt><kbd>ESC</kbd></dt><dd>Pause</dd></div>
+          <div><dt><kbd>M</kbd></dt><dd>Toggle Sound</dd></div>
+        </dl>
+        <p class="guide-intro">Every step you take is recorded. Rewind through your own history to turn movement into a weapon.</p>
+      </section>
+
+      <section class="guide-section" aria-labelledby="story-heading">
+        <h2 id="story-heading">STORY MODE</h2>
+        <div class="story-grid">
+          <article class="guide-card">
+            <h3>ACT I — RECORD</h3>
+            <p class="tagline"><strong>Survive. Every movement matters.</strong></p>
+            <p>Survive for 90 seconds against relentless pursuers. Your movements are recorded, and the final 30 seconds will become your next challenge.</p>
+            <p>After 01:00, the arena clock turns red and displays milliseconds as the recording enters its final moments.</p>
+          </article>
+          <article class="guide-card">
+            <h3>ACT II — REWIND</h3>
+            <p class="tagline"><strong>Face the person you were 30 seconds ago.</strong></p>
+            <p>Your recorded self replays the final 30 seconds of Act I at its original speed.</p>
+            <p>Follow its purple one-second path preview, dodge incoming fire, and intercept your past self with a single rewind attack.</p>
+            <p>The phantom's own recorded attacks cannot hurt you. But the system's projectiles certainly can.</p>
+          </article>
+          <article class="guide-card">
+            <h3>ACT III — ERASE</h3>
+            <p class="tagline"><strong>Some recordings refuse to disappear.</strong></p>
+            <p>The archive releases the copies that should have been erased.</p>
+            <p>With only 1 HP remaining, survive their attacks. When the time core appears with 30 seconds left, destroy it with three successful hits.</p>
+            <p>Breaking the core isn't enough.</p>
+            <p><strong>You must survive until 00:00.</strong></p>
+          </article>
+        </div>
+      </section>
+
+      <section class="guide-section endless-guide" aria-labelledby="endless-heading">
+        <h2 id="endless-heading">ENDLESS MODE — THE TAPE NEVER STOPS</h2>
+        <p class="tagline"><strong>How long can you survive when even the battlefield can rewind?</strong></p>
+        <div class="reading-copy">
+          <p>Begin with three challenges:</p>
+          <ul class="challenge-list">
+            <li><strong>BULLET STORM</strong> — Survive the pursuing swarm.</li>
+            <li><strong>DETONATION</strong> — Rewind and replay a chain of explosions.</li>
+            <li><strong>MECHANIC RUSH</strong> — Learn the rules of the battlefield.</li>
+          </ul>
+          <p>Then face <strong>MASTER TAPE</strong>, an enormous, indestructible cassette that turns the entire arena against you.</p>
+          <p>Track locks, sweeping beams, exploding sectors, and advancing danger zones combine into increasingly demanding attacks.</p>
+          <p>Rewinding also reverses the arena's recorded history. Every mechanism can play again, and its attacks can destroy your pursuers.</p>
+          <p>But the machine has learned to rewind, too.</p>
+          <p class="memory-callout"><strong>MEMORY LOCK</strong> forces you backward through your own movements, then makes you face the same attack without advance warnings.</p>
+          <p>After the first cycle, every boss phase combines multiple mechanics and ends with another memory challenge. Each spawn releases more pursuers, eventually reaching 81 at once.</p>
+          <p>The boss cannot be destroyed. The tape keeps running.</p>
+          <p><strong>Your only goal is to last longer.</strong></p>
+        </div>
+      </section>
+
+      <section class="guide-section" aria-labelledby="shortcuts-heading">
+        <h2 id="shortcuts-heading">CHEAT KEYS &amp; CHALLENGE SHORTCUTS</h2>
+        <p class="guide-intro">These optional shortcuts let you explore the game, experiment with its mechanics, or jump straight into its toughest challenges.</p>
+        <div class="shortcut-grid">
+          <article class="guide-card">
+            <h3><kbd>F2</kbd> — GOD MODE</h3>
+            <p>Toggle invincibility ON / OFF. Disabled by default.</p>
+          </article>
+          <article class="guide-card">
+            <h3><kbd>F4</kbd> — ENDLESS MODE SHORTCUT</h3>
+            <p>Enter Endless Mode without completing the story first.</p>
+          </article>
+          <article class="guide-card">
+            <h3><kbd>F8</kbd> — MASTER TAPE CHALLENGE</h3>
+            <p>Think you're ready for the hardest part?</p>
+            <p>Jump directly into MASTER TAPE's first-loop final trial (P7), where advanced boss mechanics put your movement, timing, and memory to the test.</p>
+            <p><strong>God Mode stays OFF. No protection. Just you and the tape.</strong></p>
+          </article>
+        </div>
+      </section>
+
+      <div class="guide-signoff">
+        <p><strong>YOUR PAST IS YOUR WEAPON.</strong></p>
+        <p class="credit"><em>Made by YEZISOFTQWQ</em><br><em>Ludum Dare 60 — OLD TECH</em></p>
+      </div>
     </footer>
   </main>
   <script>
@@ -43,7 +120,7 @@
     }
     canvas.addEventListener('pointerdown', () => canvas.focus());
     canvas.addEventListener('keydown', event => {
-      if (['Space', 'F4', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
+      if (['Space', 'F4', 'F8', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
     });
     fullscreen.addEventListener('click', () => {
       if (playerInstance) { playerInstance.SetFullscreen(1); canvas.focus(); }
@@ -62,7 +139,7 @@
           streamingAssetsUrl: 'StreamingAssets',
           companyName: 'Tape Lab',
           productName: 'REWIND RAMPAGE',
-          productVersion: '0.9.4',
+          productVersion: '1.0.0',
           showBanner: (message, type) => { if (type === 'error') showError(message); }
         }, progress => {
           document.querySelector('#progress-fill').style.width = `${Math.round(progress * 100)}%`;

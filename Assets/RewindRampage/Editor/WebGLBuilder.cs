@@ -8,9 +8,13 @@ namespace RewindRampage.Editor
 {
     public static class WebGLBuilder
     {
+        public const string ReleaseVersion = "1.0.0";
         [MenuItem("Rewind Rampage/Build Windows preview")]
         public static void BuildDesktop()
         {
+            PlayerSettings.bundleVersion = ReleaseVersion;
+            AssetDatabase.SaveAssets();
+            Debug.Log("Building REWIND RAMPAGE " + ReleaseVersion + " for Windows64.");
             string project = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
             string output = Path.Combine(project, "Builds/Windows/RewindRampage.exe");
             string[] args = Environment.GetCommandLineArgs();
@@ -55,7 +59,7 @@ namespace RewindRampage.Editor
             PlayerSettings.WebGL.memorySize = 256;
             PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.ExplicitlyThrownExceptionsOnly;
             PlayerSettings.SetIl2CppCompilerConfiguration(BuildTargetGroup.WebGL, Il2CppCompilerConfiguration.Release);
-            PlayerSettings.bundleVersion = "0.9.4";
+            PlayerSettings.bundleVersion = ReleaseVersion;
             EditorUserBuildSettings.development = false;
 
             BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions

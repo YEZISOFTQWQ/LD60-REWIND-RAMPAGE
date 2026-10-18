@@ -32,6 +32,12 @@ Thumbs.db
 /Assets/RewindRampage/Documentation/
 /Assets/RewindRampage/Documentation.meta
 
+# Local artwork export and isolated screenshot helpers
+/Assets/RewindRampage/Editor/ArtworkExporter.cs
+/Assets/RewindRampage/Editor/ArtworkExporter.cs.meta
+/Assets/RewindRampage/Editor/BossCharacterPreview.cs
+/Assets/RewindRampage/Editor/BossCharacterPreview.cs.meta
+
 # Runtime exports are deliberately committed for GitHub Pages.
 !/docs/Build/
 !/docs/Build/**

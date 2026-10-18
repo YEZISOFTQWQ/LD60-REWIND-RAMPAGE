@@ -157,6 +157,10 @@ namespace RewindRampage
         {
             bool playing = game.State == SessionState.Playing;
             view.menu.SetActive(!playing);
+            bool title = game.State == SessionState.Title;
+            view.menuTag.gameObject.SetActive(!title && game.State != SessionState.Paused);
+            view.menuInstructions.gameObject.SetActive(!title);
+            view.menuStats.gameObject.SetActive(!title);
             view.restart.gameObject.SetActive(game.State == SessionState.Paused || (game.State == SessionState.Results && (game.InEndless || game.InArchive || (game.InDuel && !game.Survived))));
             view.restart.GetComponentInChildren<TextMeshProUGUI>().text = game.InEndless ? game.State == SessionState.Results ? "MAIN MENU" : "RESTART ENDLESS" : game.InArchive ? game.State == SessionState.Results ? "MAIN MENU" : "RESTART ARCHIVE" : game.InDuel ? "NEW RECORDING" : "RESTART TAPE";
             view.endlessEntry.gameObject.SetActive(game.State == SessionState.Title);
@@ -282,7 +286,7 @@ namespace RewindRampage
             previousHealth = game.Player.Health;
             int visibleHealth = game.InArchive ? game.Act3Story.VisibleHealth : game.Player.Health;
             for (int i = 0; i < view.health.Length; i++)
-                view.health[i].color = i < visibleHealth ? GameArt.Cyan : new Color(0.08f, 0.21f, 0.22f, 0.55f);
+                view.health[i].color = i < visibleHealth ? TapeTransportHud.Phosphor : TapeTransportHud.LostIntegrity;
             damageFlash = Mathf.Max(0f, damageFlash - deltaTime);
             Color flashColor = GameArt.Red;
             flashColor.a = damageFlash * 0.2f;
@@ -321,7 +325,7 @@ namespace RewindRampage
                 : Mathf.Clamp01(game.Recorder.Duration / game.Tuning.recordDuration);
             for (int i = 0; i < view.tapeSegments.Length; i++)
                 view.tapeSegments[i].color = i < Mathf.CeilToInt(tapeFraction * view.tapeSegments.Length)
-                    ? reversingTape ? GameArt.Gold : GameArt.Cyan : new Color(0.1f, 0.18f, 0.22f);
+                    ? TapeTransportHud.Phosphor : TapeTransportHud.EmptyBuffer;
             view.tapeTime.SetText("{0:1}s / 3.0s", game.Recorder.Duration);
             string ability = reconstructingTape ? "<<< RECONSTRUCTING" : rewinding ? "<<< REWINDING / 5x" : cooling ? "RECHARGING" : ready ? "SPACE / REWIND" : "MOVE TO RECORD";
             if (game.InEndless && game.Endless.Phase != EndlessPhase.BulletStorm)
@@ -333,7 +337,7 @@ namespace RewindRampage
                     (game.Endless.Boss.Round == 0 ? "MASTER TAPE" : game.Endless.Boss.Status);
             if (forced) ability = "MEMORY LOCK / << REW";
             if (previousAbility != ability) { view.abilityLabel.text = ability; previousAbility = ability; }
-            view.abilityLabel.color = rewinding || ready ? GameArt.Gold : GameArt.Muted;
+            view.abilityLabel.color = rewinding || ready ? TapeTransportHud.Phosphor : TapeTransportHud.Readout;
             if (cooling) view.tapeTime.SetText("COOLDOWN {0:1}s", game.Rewind.CooldownRemaining);
             if (rewinding) view.tapeTime.SetText("<< {0:1}s / 3.0s", game.Rewind.RemainingTapeDuration);
             if (forced) view.tapeTime.SetText("FORCED << {0:1}s", game.Endless.Boss.ForcedRemainingHistorySeconds);
@@ -684,7 +688,10 @@ namespace RewindRampage
 
         public void SetEnglishPreview()
         {
-            view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.8.6";
+            view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v" + Application.version;
+            view.menuTag.gameObject.SetActive(false);
+            view.menuInstructions.gameObject.SetActive(false);
+            view.menuStats.gameObject.SetActive(false);
             view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
             view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
             view.menuInstructions.text = TitleInstructions;

@@ -21,7 +21,7 @@ namespace RewindRampage.Validation
             throw new MissingMethodException(n);
         }
         [UnityTest]
-        public IEnumerator F5Entry_FirstP7_FullMemoryTrial_RepeatAndStoryReset()
+        public IEnumerator MasterTapeEntry_FirstP7_FullMemoryTrial_RepeatAndStoryReset()
         {
             yield return SceneManager.LoadSceneAsync("SampleScene");
             Type type = Assembly.Load("Assembly-CSharp").GetType("RewindRampage.GameManager", true);
@@ -30,7 +30,7 @@ namespace RewindRampage.Validation
             Call(game, "StartEndlessP7Test"); object endless = Get(game, "Endless"), boss = Get(endless, "Boss");
             Assert.AreEqual(7, Get(boss, "PhaseId")); Assert.AreEqual(0, Get(boss, "LoopIndex")); Assert.Less((float)Get(boss, "Rta"), 0.01f);
             Assert.IsFalse((bool)Get(game, "Invincible"));
-            Call(game, "ToggleInvincibility"); // Explicit test-only protection, never enabled by F5.
+            Call(game, "ToggleInvincibility"); // Explicit test-only protection, never enabled by the challenge shortcut.
             bool force = false, blind = false; int ticks = 0;
             while ((int)Get(boss, "LoopIndex") == 0 && ticks++ < 2000)
             {
@@ -43,7 +43,7 @@ namespace RewindRampage.Validation
             Call(game, "StartEndlessP7Test"); object retry = Get(endless, "Boss"); Assert.AreNotSame(boss, retry);
             Assert.AreEqual(7, Get(retry, "PhaseId")); Assert.AreEqual(0, Get(retry, "LoopIndex"));
             Call(game, "StartRun"); Assert.IsNull(Get(endless, "Boss")); Assert.AreEqual("Rec", Get(game, "Act").ToString());
-            File.WriteAllText("Logs/V094-F5-PlayMode.txt", "F5 production entry: first P7, fresh RTA, no automatic god mode; all four rounds and original force/blind trial -> next P4; repeated entry replaces prior run cleanly; story reset verified.");
+            File.WriteAllText("Logs/MasterTape-Entry-PlayMode.txt", "Master Tape production entry: first P7, fresh RTA, no automatic god mode; all four rounds and original force/blind trial -> next P4; repeated entry replaces prior run cleanly; story reset verified.");
             ((Behaviour)game).enabled = true;
         }
         [UnityTest]
