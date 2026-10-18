@@ -51,6 +51,16 @@ MonoBehaviour:
   ghostBossInvulnerability: 0.7
   replayWarningLead: 0.5
   replayClipProtection: 0.5
+  act2Difficulty:
+    phantomHitRadiusScale: 1.05
+    phantomFuturePreviewSeconds: 1
+    projectileSpawnRateScaleNormal: 0.75
+    projectileSpawnRateScaleFinal: 0.9
+    projectileSpeedScale: 1
+    initialNoProjectileSeconds: 1
+    firingWindowSeconds: 2.5
+    restWindowSeconds: 0.5
+    finalPressureStartSeconds: 20
   storyPlaybackSpeed: 0.65
   archivePlayerHealth: 3
   archiveEchoHealth: 1

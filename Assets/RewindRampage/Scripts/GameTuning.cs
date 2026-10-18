@@ -2,6 +2,20 @@ using UnityEngine;
 
 namespace RewindRampage
 {
+    [System.Serializable]
+    public sealed class Act2DifficultyConfig
+    {
+        [Min(0.01f)] public float phantomHitRadiusScale = 1.05f;
+        [Min(0f)] public float phantomFuturePreviewSeconds = 1f;
+        [Range(0f, 3f)] public float projectileSpawnRateScaleNormal = 0.75f;
+        [Range(0f, 3f)] public float projectileSpawnRateScaleFinal = 0.90f;
+        [Range(0f, 3f)] public float projectileSpeedScale = 1f;
+        [Min(0f)] public float initialNoProjectileSeconds = 1f;
+        [Min(0.01f)] public float firingWindowSeconds = 2.5f;
+        [Min(0f)] public float restWindowSeconds = 0.5f;
+        [Min(0f)] public float finalPressureStartSeconds = 20f;
+    }
+
     [CreateAssetMenu(menuName = "Rewind Rampage/Game tuning")]
     public sealed class GameTuning : ScriptableObject
     {
@@ -55,6 +69,7 @@ namespace RewindRampage
         [Min(0f)] public float ghostBossInvulnerability = 0.7f;
         [Min(0.1f)] public float replayWarningLead = 0.5f;
         [Min(0f)] public float replayClipProtection = 0.5f;
+        public Act2DifficultyConfig act2Difficulty = new Act2DifficultyConfig();
 
         [Header("Act III / Archive")]
         [Range(0.35f, 1f)] public float storyPlaybackSpeed = 0.65f;

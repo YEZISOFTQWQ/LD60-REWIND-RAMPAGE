@@ -14,7 +14,7 @@ namespace RewindRampage
     // Reads the immutable recording. Neither these lines nor their marker can deal damage.
     public sealed class Act2FutureTrail : IDisposable
     {
-        public const float PreviewDuration = 2f;
+        private readonly Act2DifficultyConfig settings;
         private readonly GameArt art;
         private readonly Transform root;
         private readonly Material dashed;
@@ -26,23 +26,23 @@ namespace RewindRampage
 
         public Act2FutureTrail(GameTuning tuning, GameArt art, Transform parent)
         {
-            this.art = art; maximumRecordedSpeed = tuning.moveSpeed * tuning.rewindMultiplier;
+            this.art = art; settings = tuning.act2Difficulty; maximumRecordedSpeed = tuning.moveSpeed * tuning.rewindMultiplier;
             root = new GameObject("Act II - future recording preview (visual only)").transform;
             root.SetParent(parent, false);
             texture = new Texture2D(8, 1, TextureFormat.RGBA32, false) { name = "Future path dashes", wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point };
             for (int i = 0; i < 8; i++) texture.SetPixel(i, 0, i < 4 ? Color.white : Color.clear);
             texture.Apply();
             dashed = new Material(art.lineMaterial) { name = "Future path purple-white", mainTexture = texture, mainTextureScale = new Vector2(3f, 1f) };
-            endpoint = ReplayVisuals.Sprite("Future instance at +2 seconds", root, art.triangle, 0.65f, 5, new Color(0.85f, 0.75f, 1f, 0.2f));
+            endpoint = ReplayVisuals.Sprite("Future recorded instance", root, art.triangle, 0.65f, 5, new Color(0.85f, 0.75f, 1f, 0.2f));
             Clear();
         }
 
-        public static void Sample(RunRecording source, float currentTime, float clipEnd, float maximumSpeed, List<FutureTrailPoint> output)
+        public static void Sample(RunRecording source, float currentTime, float clipEnd, float maximumSpeed, List<FutureTrailPoint> output, float previewSeconds)
         {
             output.Clear();
             if (source == null || source.Frames.Count == 0) return;
             currentTime = Mathf.Clamp(currentTime, source.Frames[0].Time, source.Duration);
-            float end = Mathf.Min(currentTime + PreviewDuration, clipEnd, source.Duration);
+            float end = Mathf.Min(currentTime + Mathf.Max(0f, previewSeconds), clipEnd, source.Duration);
             output.Add(new FutureTrailPoint(source.SamplePosition(currentTime), true));
             int first = source.FindFrame(currentTime), last = first;
             for (int i = first + 1; i < source.Frames.Count && source.Frames[i].Time <= end; i++)
@@ -66,7 +66,7 @@ namespace RewindRampage
 
         public void Show(RunRecording recording, float replayTime, float clipEnd)
         {
-            Sample(recording, replayTime, clipEnd, maximumRecordedSpeed, points);
+            Sample(recording, replayTime, clipEnd, maximumRecordedSpeed, points, settings.phantomFuturePreviewSeconds);
             int used = 0, first = 0;
             for (int i = 1; i <= points.Count; i++)
             {
