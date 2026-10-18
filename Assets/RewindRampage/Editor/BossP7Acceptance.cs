@@ -144,9 +144,9 @@ namespace RewindRampage.Editor
                 s.Position = Route(answer.SafeRoute, boss.Rta); s.To(boundary + 1.3f);
                 Check(s.Forces == 1 && memory.ForceCount == 1 && ReferenceEquals(answer, memory.Answer), "P7-18", "crossing former trigger again cannot loop the same forced rewind");
                 Check(s.Hits == 0, "P7-28", "real P7 field callbacks accept no hits on speed-bounded route for first and blind playbacks");
-                s.Until(() => boss.FindRound(7, 4, 1)?.Memory?.ForceCount == 1);
-                MemoryLockAttempt next = boss.FindRound(7, 4, 1).Memory;
-                Check(next.Identity != memory.Identity && next.ForceCount == 1 && memory.ForceCount == 1 && !ReferenceEquals(next.Answer, answer), "P7-27", "next-loop P7 gets independent fixed answer and one-shot attempt, no difficulty escalation");
+                s.Until(() => boss.FindRound(7, 3, 1)?.Memory?.ForceCount == 1);
+                MemoryLockAttempt next = boss.FindRound(7, 3, 1).Memory;
+                Check(next.Identity != memory.Identity && next.ForceCount == 1 && memory.ForceCount == 1 && !ReferenceEquals(next.Answer, answer), "P7-27", "overload final composite gets independent fixed answer and one-shot attempt; original first trial unchanged");
                 s.Alive = false; float frozen = boss.Rta; s.Step(); s.Back(1f);
                 Check(boss.IsFrozen && Mathf.Abs(frozen - boss.Rta) < 0.001f, "P7-25-A", "death freezes force/phase/RTA with no Boss victory branch");
             }

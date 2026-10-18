@@ -30,6 +30,11 @@ namespace RewindRampage
         private readonly GameTuning tuning;
         private readonly EndlessSettings settings;
         public BossPatternPlanner(GameTuning tuning, EndlessSettings settings) { this.tuning = tuning; this.settings = settings; }
+        private bool TrySolvePrepared(BossPatternEvent[] events, Vector2 player, float start, out List<BossRoutePoint> route)
+        {
+            TelegraphOrchestrator.Prepare(events, start, settings.Telegraphs);
+            return BossSafeRouteSolver.TrySolve(events, player, start, tuning, settings, out route);
+        }
 
         public BossMechanicProfile TrackProfile(bool combined, int runId, Vector2 emitter, int round = 3) => new BossMechanicProfile
         {
@@ -63,7 +68,7 @@ namespace RewindRampage
                         new BossPatternEvent(EndlessMechanicKind.HeadSweep, lockTime + delay, sweep, center) };
                 }
                 else events = new[] { new BossPatternEvent(EndlessMechanicKind.TrackLock, birth, circle, center) };
-                if (BossSafeRouteSolver.TrySolve(events, center, lockTime, tuning, settings, out List<BossRoutePoint> route))
+                if (TrySolvePrepared(events, center, lockTime, out List<BossRoutePoint> route))
                     return new BossPatternPlan(events, route, candidate);
             }
             throw new InvalidOperationException("P4 configuration has no certified normal-movement escape route. Increase warnings/gap or reduce lock radius.");
@@ -105,7 +110,7 @@ namespace RewindRampage
                 else events = round == 1 ? new[] { new BossPatternEvent(EndlessMechanicKind.HeadSweep, birth, sweep, player) } :
                     new[] { new BossPatternEvent(EndlessMechanicKind.BadSectors, birth, sectors, player) };
                 if (!ValidateOverlap(phase, round, events)) continue;
-                if (BossSafeRouteSolver.TrySolve(events, player, birth, tuning, settings, out List<BossRoutePoint> route))
+                if (TrySolvePrepared(events, player, birth, out List<BossRoutePoint> route))
                     return new BossPatternPlan(events, route, candidate);
             }
             throw new InvalidOperationException("P" + phase + " round " + round + " has no safe candidate with current movement/arena settings. Check the Boss tuning.");

@@ -325,11 +325,11 @@ namespace RewindRampage
             view.tapeTime.SetText("{0:1}s / 3.0s", game.Recorder.Duration);
             string ability = reconstructingTape ? "<<< RECONSTRUCTING" : rewinding ? "<<< REWINDING / 5x" : cooling ? "RECHARGING" : ready ? "SPACE / REWIND" : "MOVE TO RECORD";
             if (game.InEndless && game.Endless.Phase != EndlessPhase.BulletStorm)
-                ability = game.Endless.PhasePlayhead < 0f ? "P1 TRACE -" + Mathf.Abs(game.Endless.PhasePlayhead).ToString("0.0") + "s"
-                    : rewinding ? "<< REWIND / " + (game.Endless.Phase == EndlessPhase.Detonation ? "P2" : "P3")
+                ability = game.Endless.PhasePlayhead < 0f ? "PAST TRACE -" + Mathf.Abs(game.Endless.PhasePlayhead).ToString("0.0") + "s"
+                    : rewinding ? "<< REWIND"
                     : game.Endless.PlaybackResumed ? "> PLAY / REPLAY" : ability;
             if (game.InEndless && game.Endless.BossStarted)
-                ability = rewinding ? "<< REW / P" + game.Endless.Boss.PhaseId : "P" + game.Endless.Boss.PhaseId + " / " +
+                ability = rewinding ? "<< REWIND" :
                     (game.Endless.Boss.Round == 0 ? "MASTER TAPE" : game.Endless.Boss.Status);
             if (forced) ability = "MEMORY LOCK / << REW";
             if (previousAbility != ability) { view.abilityLabel.text = ability; previousAbility = ability; }

@@ -144,6 +144,7 @@ namespace RewindRampage
             if (Input.GetKeyDown(KeyCode.M)) ToggleMute();
             if (Input.GetKeyDown(KeyCode.F2)) ToggleInvincibility();
             if (Input.GetKeyDown(KeyCode.F4)) UnlockEndlessMode();
+            if (Input.GetKeyDown(KeyCode.F5)) { StartEndlessP7Test(); return; }
             if (State == SessionState.Title || State == SessionState.Results)
             {
                 if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return)) ActivatePrimary();
@@ -535,6 +536,11 @@ namespace RewindRampage
             endless.Start(); feedback.PlayStart();
         }
 
+        public void StartEndlessP7Test()
+        {
+            StartEndless(); endless.StartFirstP7Test();
+            hud.ShowNotice("MASTER TAPE TEST LOADED.");
+        }
         private void TickEndless(float deltaTime)
         {
             bool requestRewind = Input.GetKeyDown(KeyCode.Space);

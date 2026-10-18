@@ -30,6 +30,9 @@ namespace RewindRampage
         private float queuedHistory, nextSpawn, p1Elapsed, phaseOrigin, resumeRemaining;
         private int attackPass;
         private bool wrapShown, previousReverse, terminationShown, imminentShown;
+        private BossSpawnLedger bossSpawns;
+        private int bossSpawnIndex;
+        public BossSpawnLedger BossSpawns => bossSpawns;
         public EndlessPhase Phase { get; private set; }
         public float RunElapsed { get; private set; }
         public float PhasePlayhead => Boss != null ? Boss.Rta : Phase == EndlessPhase.BulletStorm ? p1Elapsed : temporal.Cursor - phaseOrigin;
@@ -71,7 +74,7 @@ namespace RewindRampage
             Stop(); Phase = EndlessPhase.BulletStorm; RunElapsed = p1Elapsed = PhaseRealElapsed = nextSpawn = queuedHistory = phaseOrigin = 0f;
             attackPass = TotalTrackersSpawned = 0; wrapShown = previousReverse = terminationShown = imminentShown = false; IsRunning = true;
             recorder.StartRecording(player.Position, player.Facing);
-            hud.ShowStoryMessage("ENDLESS RECORDING STARTED.\nP1 / BULLET STORM.", 4f);
+            hud.ShowStoryMessage("ENDLESS RECORDING STARTED.\nBULLET STORM.", 4f);
             // Spawn at t=0, then continue at the configured rate with no population cap.
             SpawnOne(0f, player.Position, 0f, false); nextSpawn = settings.P1IntervalAt(0f);
         }
@@ -92,19 +95,14 @@ namespace RewindRampage
             {
                 RunElapsed = runClock; PhaseRealElapsed += deltaTime;
                 bool backwards = wasRewinding || isRewinding || ForcedRewinding;
+                spawner.SetTelegraphGlow(Boss.TelegraphGlow);
                 if (!backwards) spawner.TickTrackers(deltaTime, player.Position); else spawner.SetFrozenVisuals(true);
                 Boss.Tick(deltaTime, queuedHistory, backwards, new MechanicFrame(runClock, playerStart, player.Position, !backwards, deltaTime), player.Facing);
                 if (IsRunning) Phase = Boss.PhaseId == 4 ? EndlessPhase.MagneticImpact : Boss.PhaseId == 5 ? EndlessPhase.CorruptedSectors : Boss.PhaseId == 6 ? EndlessPhase.InterferenceMatrix : EndlessPhase.FinalOverwrite;
                 queuedHistory = 0f;
                 if (Boss.Rta < 0.6f) { ghost.SetPresentationOpacity(0.45f * (1f - Boss.Rta / 0.6f)); ghost.TickVisual(deltaTime); }
                 else ghost.StopPlayback();
-                if (IsRunning && !backwards && player.Health > 0)
-                    while (nextSpawn <= Boss.Rta)
-                    {
-                        if (settings.BossFollowersEnabled(Boss.PhaseId)) SpawnOne(runClock, player.Position, 0f, false);
-                        nextSpawn += settings.BossFollowerInterval(Boss.PhaseId);
-                    }
-                if (IsRunning && !backwards) checkTrackerContacts();
+                if (IsRunning && !backwards && !ForcedRewinding && player.Health > 0) checkTrackerContacts();
                 return;
             }
             float previousPhase = PhasePlayhead; RunElapsed = runClock; PhaseRealElapsed += deltaTime;
@@ -210,13 +208,19 @@ namespace RewindRampage
             temporal.Register(arenaMechanics[index]);
         }
         private void BeginBoss()
+        { BeginBossAt(false); }
+        public void StartFirstP7Test()
+        { if (IsRunning && Boss == null) { recorder.ClearRecording(); BeginBossAt(true); } }
+        private void BeginBossAt(bool firstP7Test)
         {
             if (Boss != null) return;
             temporal.Clear(); spawner.ResetEnemies();
-            Phase = EndlessPhase.MagneticImpact; PhaseRealElapsed = queuedHistory = 0f;
+            Phase = firstP7Test ? EndlessPhase.FinalOverwrite : EndlessPhase.MagneticImpact; PhaseRealElapsed = queuedHistory = 0f;
             nextSpawn = Mathf.Max(6f, settings.p4FollowerSpawnInterval);
             Boss = new EndlessBossDirector(tuning, settings, visuals, DamageArea, () => ++attackPass,
-                text => hud.ShowStoryMessage(text, 4.5f), feedback.BossImpact, () => player.Health > 0);
+                text => hud.ShowStoryMessage(text, 4.5f), feedback.BossImpact, () => player.Health > 0, firstP7Test);
+            bossSpawns = new BossSpawnLedger(); bossSpawnIndex = 0;
+            Boss.ForwardAdvanced += SpawnBossEvents;
             Boss.OnP4Completed += CompleteBossPhase;
             Boss.OnP5Completed += () => P6Requested?.Invoke();
             Boss.OnP6Completed += () => P7Requested?.Invoke();
@@ -224,6 +228,33 @@ namespace RewindRampage
             Boss.ForcedPose += pose => { player.SetHistoricalPose(pose); feedback.AppendAttackPoint(pose.Position); };
             Boss.ForcedRewindFinished += memory => playerRewind?.ResumeAfterBossForce(memory, RunElapsed);
             P4Requested?.Invoke();
+        }
+        private void SpawnBossEvents(float cursor)
+        {
+            // Called on each forward world slice BEFORE a force can move the cursor back.
+            // Event metadata comes from that historical timestamp, never a later loop's HUD.
+            while (IsRunning && player.Health > 0 && nextSpawn <= cursor + 0.000001f)
+            {
+                string identity = Boss.RunId + ":spawn:" + bossSpawnIndex;
+                BossSpawnEvent pending = bossSpawns.Find(identity);
+                BossRoundHistory at = Boss.HistoryAt(nextSpawn);
+                // An unfinished transaction can straddle a phase/loop boundary. Its original
+                // owner and member count stay sealed even if the playback branch has moved on.
+                int loop = pending != null ? pending.Loop : at.Loop;
+                int phase = pending != null ? pending.Phase : at.Phase;
+                int count = pending != null ? pending.Count : settings.BossFollowersEnabled(phase) ? BossSpawnLedger.CountForLoop(loop) : 0;
+                try
+                {
+                    bossSpawns.Execute(identity, loop, phase, nextSpawn, Boss.PlayerPose.Position, count, target =>
+                    {
+                        EnemyController enemy = loop == 0 ? spawner.SpawnTracker(target) : spawner.SpawnBossBatchMember(player.Position);
+                        if (enemy == null) return 0;
+                        TotalTrackersSpawned++; return enemy.SpawnId;
+                    });
+                }
+                catch (Exception error) { Debug.LogException(error); return; } // Retry the missing suffix on the next forward slice.
+                bossSpawnIndex++; nextSpawn += settings.BossFollowerInterval(phase);
+            }
         }
         private void CompleteBossPhase()
         {
@@ -248,7 +279,7 @@ namespace RewindRampage
         }
         public void Stop(bool clearGhost = true)
         {
-            Boss?.Dispose(); Boss = null;
+            Boss?.Dispose(); Boss = null; bossSpawns = null; spawner.SetTelegraphGlow(1f);
             IsRunning = false; temporal.Clear(); Detonation = null; history.Clear(); if (clearGhost) ghost.ClearRecording(); recorder.ClearRecording();
             P1Recording = null; queuedHistory = 0f; playerHits.Clear(); enemyHits.Clear();
             Array.Clear(arenaMechanics, 0, arenaMechanics.Length); resumeRemaining = 0f;

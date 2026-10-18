@@ -24,6 +24,8 @@ namespace RewindRampage
         public float AdvanceInterval = 0.6f, HoldSeconds = 0.9f;
         public bool VerticalBands;
         public bool LetterWaveLabels;
+        public bool CompositePresentation;
+        public TelegraphOrchestrator Telegraphs { get; internal set; }
     }
 
     // A fixed parameter set plus recorded targeting. Seeking never rolls RNG or selects a new target.
@@ -47,6 +49,7 @@ namespace RewindRampage
         private readonly float gapY;
         private readonly LineRenderer directionArrow;
         private readonly TextMeshPro[] sequenceLabels;
+        private readonly TelegraphOrchestrator teachingTelegraphs;
         private int pass;
         private bool newPass, locked;
         private int resolvedMask;
@@ -87,8 +90,14 @@ namespace RewindRampage
         {
             this.kind = kind; start = birth; initialTarget = target; half = arenaHalfSize; this.settings = settings; boss = bossProfile;
             // Keep every first presentation inside its seven-second teaching slot.
-            warning = boss != null ? boss.FollowSeconds + boss.WarningSeconds : Mathf.Clamp(settings.Warning(kind), 1.5f, 4.5f);
-            duration = boss != null ? boss.DamageSeconds : Mathf.Clamp(settings.mechanicAttackDuration, 0.2f, 6.5f - warning);
+            float authoredWarning = boss != null ? boss.FollowSeconds + boss.WarningSeconds : Mathf.Clamp(settings.Warning(kind), 1.5f, 4.5f);
+            warning = boss == null && kind == EndlessMechanicKind.Overwrite ? Mathf.Max(authoredWarning, settings.Telegraphs.RequiredLead(settings.overwriteSteps)) : authoredWarning;
+            duration = boss != null ? boss.DamageSeconds : Mathf.Clamp(settings.mechanicAttackDuration, 0.2f, 6.5f - authoredWarning);
+            if (boss == null && kind == EndlessMechanicKind.Overwrite)
+            {
+                if (warning + duration > 7f) throw new InvalidOperationException("Teaching OVERWRITE preview does not fit its seven-second slot. Check presentation settings.");
+                teachingTelegraphs = TelegraphOrchestrator.Teaching(start, settings.overwriteSteps, settings.Telegraphs);
+            }
             followSeconds = boss != null ? boss.FollowSeconds : warning * 0.45f;
             trackRadius = boss != null ? boss.Radius : settings.trackLockRadius;
             sweepWidth = boss != null ? boss.SweepWidth : settings.sweepWidth;
@@ -225,86 +234,80 @@ namespace RewindRampage
         private void Present(float time)
         {
             if (views == null) return;
-            foreach (EndlessAreaView view in views) view.Hide();
-            if (sequenceLabels != null) foreach (TextMeshPro label in sequenceLabels) label.gameObject.SetActive(Visible);
-            if (directionArrow != null) directionArrow.enabled = Visible && time <= End;
-            if (!Visible) return;
-            bool warningState = time < AttackAt;
-            float progress = Mathf.InverseLerp(start, AttackAt, time);
-            Color warningColor = HazardVisualLanguage.Warning(progress, time);
-            Color color = Color.Lerp(warningState ? warningColor : HazardVisualLanguage.Active(time - AttackAt), HazardVisualLanguage.Reverse(time), rewindTint);
-            if (boss != null && kind == EndlessMechanicKind.TrackLock && time >= LockAt)
-                color = reversing ? EndlessVisuals.RewindColor : GameArt.Red;
-            color.a = warningState ? 0.7f + 0.3f * Mathf.Abs(Mathf.Sin(time * 9f)) : 1f;
-            float fill = warningState ? settings.warningFillAlpha : settings.attackFillAlpha;
-            bool finished = time > End;
-            if (finished) { color = Color.Lerp(new Color(0.3f, 0.43f, 0.5f, 0.35f), EndlessVisuals.RewindColor, rewindTint); fill = 0.025f; }
-            if (directionArrow != null && directionArrow.enabled)
-            {
-                float direction = (reversing ? -1f : 1f) * (boss != null && boss.RightToLeft ? -1f : 1f);
-                float y = kind == EndlessMechanicKind.HeadSweep ? gapY : OverwriteRegion(0).center.y;
-                float x = kind == EndlessMechanicKind.HeadSweep && !warningState ? Mathf.Clamp(SweepX(time), -half.x + 2f, half.x - 2f) : 0f;
-                directionArrow.startColor = directionArrow.endColor = color;
-                directionArrow.SetPosition(0, new Vector3(x - direction * 2f, y)); directionArrow.SetPosition(1, new Vector3(x + direction * 2f, y));
-                directionArrow.SetPosition(2, new Vector3(x + direction * 1.5f, y + 0.35f)); directionArrow.SetPosition(3, new Vector3(x + direction * 2f, y));
-                directionArrow.SetPosition(4, new Vector3(x + direction * 1.5f, y - 0.35f));
-            }
+            foreach (var view in views) { view.Hide(); view.PrioritizeBoundary(10); }
+            if (sequenceLabels != null) foreach (var label in sequenceLabels) label.gameObject.SetActive(false);
+            if (directionArrow != null) directionArrow.enabled = false;
+            if (time < start || time >= End) return;
+            var style = settings.Telegraphs; float width = style.WorldOutline(Camera.main);
+            bool advance = !TelegraphSuppressed, warningState = time < AttackAt;
+            Color amber = HazardVisualLanguage.Warning(Mathf.InverseLerp(start, AttackAt, time), time);
+            Color active = reversing ? HazardVisualLanguage.Reverse(time) : HazardVisualLanguage.Active(time - AttackAt);
             if (kind == EndlessMechanicKind.TrackLock)
             {
-                if (!reversing && time >= LockAt && time < LockAt + 0.12f) color = HazardVisualLanguage.Highlight;
-                if (time > AttackAt + 0.45f) { color.a = 0.22f; fill = 0.02f; }
-                else if (!warningState) color = Color.Lerp(Color.white, color, Mathf.Clamp01((time - AttackAt) / 0.18f));
-                if (boss != null && time >= LockAt && time < LockAt + 0.18f) color = reversing ? EndlessVisuals.RewindColor : Color.white;
-                views[0].Show(new MechanicArea(TargetAt(time), trackRadius), color, fill, reversing,
-                    warningState ? progress : -1f, settings.boundaryWidth);
-                if (warningState)
-                    views[1].Show(new MechanicArea(TargetAt(time), trackRadius * 0.25f), color, 0.12f, reversing, -1f, settings.boundaryWidth);
+                if (warningState && advance)
+                {
+                    bool tracking = time < LockAt; Color pale = style.trackingColor;
+                    pale.a = tracking ? style.trackingOutlineAlpha : style.lockedOutlineAlpha;
+                    views[0].Show(new MechanicArea(TargetAt(time), trackRadius), pale,
+                        tracking ? style.trackingFillAlpha : style.lockedFillAlpha, tracking, -1f, width);
+                }
+                else if (!warningState && time < AttackAt + 0.16f)
+                    views[0].Show(new MechanicArea(lockedCenter, trackRadius), active, settings.attackFillAlpha, false, -1f, width * 1.8f);
             }
             else if (kind == EndlessMechanicKind.HeadSweep)
             {
-                float x = warningState ? SweepX(AttackAt) : SweepX(time);
-                float low = x - sweepWidth * 0.5f, high = x + sweepWidth * 0.5f;
-                if (!finished)
+                if (warningState && !advance) return;
+                float x = SweepX(warningState ? AttackAt : time);
+                views[0].Show(SweepRegion(x - sweepWidth * 0.5f, x + sweepWidth * 0.5f, false), warningState ? amber : active,
+                    warningState ? 0f : settings.attackFillAlpha, false, -1f, width * 1.6f);
+                views[1].Show(SweepRegion(x - sweepWidth * 0.5f, x + sweepWidth * 0.5f, true), warningState ? amber : active,
+                    warningState ? 0f : settings.attackFillAlpha, false, -1f, width * 1.6f);
+                if (advance)
                 {
-                    views[0].Show(SweepRegion(low, high, false), color, fill, reversing, -1f, settings.boundaryWidth * 1.6f);
-                    views[1].Show(SweepRegion(low, high, true), color, fill, reversing, -1f, settings.boundaryWidth * 1.6f);
-                }
-                views[4].Show(new MechanicArea(new Rect(-half.x, gapY - safeGap * 0.5f, half.x * 2f, safeGap)),
-                    new Color(0.15f, 0.66f, 0.68f, 0.65f), 0.045f, false);
-                if (warningState)
-                {
-                    views[2].Show(SweepRegion(-half.x, half.x, false), color, settings.warningFillAlpha * 0.5f, true, progress, settings.boundaryWidth);
-                    views[3].Show(SweepRegion(-half.x, half.x, true), color, settings.warningFillAlpha * 0.5f, true, progress, settings.boundaryWidth);
-                }
-                else if (!finished)
-                {
-                    float tail = SweepX(Mathf.Clamp(time + (reversing ? 0.12f : -0.12f), AttackAt, End));
-                    Color trail = color; trail.a = 0.25f;
-                    views[2].Show(SweepRegion(Mathf.Min(tail, x), Mathf.Max(tail, x), false), trail, 0.1f, reversing);
-                    views[3].Show(SweepRegion(Mathf.Min(tail, x), Mathf.Max(tail, x), true), trail, 0.1f, reversing);
+                    views[4].Show(new MechanicArea(new Rect(-half.x, gapY - safeGap * 0.5f, half.x * 2f, safeGap)), GameArt.Cyan, 0f, true, -1f, width);
+                    DrawTeachingArrow(new Vector2(Mathf.Clamp(x, -half.x + 2f, half.x - 2f), gapY), Vector2.right, amber, width);
                 }
             }
             else if (kind == EndlessMechanicKind.BadSectors)
+            {
+                int next = 0; while (next < sectors.Length && time >= AttackAt + duration * next / sectors.Length + 0.12f) next++;
                 for (int i = 0; i < sectors.Length; i++)
                 {
-                    float trigger = AttackAt + duration * i / sectors.Length;
-                    Color sector = time < trigger ? Color.Lerp(warningColor, EndlessVisuals.RewindColor, rewindTint) : color;
-                    bool complete = time > trigger + 0.4f;
-                    if (complete) sector.a = 0.22f;
-                    sequenceLabels[i].color = sector;
-                    views[i].Show(new MechanicArea(sectors[i]), sector, complete ? 0.02f : fill, reversing,
-                        time < trigger ? Mathf.InverseLerp(start, trigger, time) : -1f, settings.boundaryWidth);
+                    float at = AttackAt + duration * i / sectors.Length;
+                    bool live = time >= at && time < at + 0.12f;
+                    if (!live && (time >= at || !advance)) continue;
+                    Color color = live ? active : amber; if (!live) color.a = i == next ? style.nearImpactOutlineAlpha : style.futureOutlineAlpha;
+                    views[i].Show(new MechanicArea(sectors[i]), color, live ? settings.attackFillAlpha : style.sectorFillAlpha * (i == next ? 0.3f : 0.06f),
+                        !live && i != next, -1f, width * (live || i == next ? 1.2f : 0.7f));
+                    sequenceLabels[i].gameObject.SetActive(advance && !live); sequenceLabels[i].color = color;
                 }
+            }
             else
             {
-                int active = Mathf.Clamp(Mathf.FloorToInt((time - AttackAt) / duration * settings.overwriteSteps), 0, settings.overwriteSteps - 1);
-                Rect lane = OverwriteRegion(0); lane.width = half.x * 2f;
-                Color plan = Color.Lerp(GameArt.Gold, EndlessVisuals.RewindColor, rewindTint); plan.a = 0.6f;
-                views[2].Show(new MechanicArea(lane), plan, 0.03f, true);
-                views[0].Show(new MechanicArea(OverwriteRegion(active)), color, fill, reversing,
-                    warningState ? progress : -1f, settings.boundaryWidth * 1.5f);
-                if (active + 1 < settings.overwriteSteps) views[1].Show(new MechanicArea(OverwriteRegion(active + 1)), plan, settings.warningFillAlpha, true);
+                var preview = teachingTelegraphs.Preview("teaching", time, !advance);
+                if (preview.Visible)
+                {
+                    Color color = GameArt.Gold; color.a = preview.Alpha;
+                    Rect rect = OverwriteRegion(preview.Step);
+                    views[0].Show(new MechanicArea(rect), color, 0.06f, true, -1f, width);
+                    DrawTeachingArrow(rect.center, Vector2.right, color, width);
+                }
+                if (!warningState)
+                {
+                    int step = Mathf.Clamp(Mathf.FloorToInt((time - AttackAt) / duration * settings.overwriteSteps), 0, settings.overwriteSteps - 1);
+                    views[1].Show(new MechanicArea(OverwriteRegion(step)), active, settings.attackFillAlpha, false, -1f, width * 1.6f);
+                }
             }
+        }
+        private void DrawTeachingArrow(Vector2 center, Vector2 direction, Color color, float width)
+        {
+            if (directionArrow == null) return;
+            Vector2 side = new Vector2(-direction.y, direction.x);
+            directionArrow.enabled = true; directionArrow.startColor = directionArrow.endColor = color;
+            directionArrow.startWidth = directionArrow.endWidth = width;
+            directionArrow.SetPosition(0, center - direction * 0.6f); directionArrow.SetPosition(1, center + direction * 0.6f);
+            directionArrow.SetPosition(2, center + direction * 0.3f + side * 0.2f); directionArrow.SetPosition(3, center + direction * 0.6f);
+            directionArrow.SetPosition(4, center + direction * 0.3f - side * 0.2f);
         }
         // Four small, phase-owned plans keep stable identity until P3 ends; no future plan is recreated on a seek.
         public bool CanReleaseHistory(float oldestReachableTime) => false;

@@ -90,13 +90,13 @@ namespace RewindRampage.Editor
                 ((TextMeshProUGUI)view.FindPropertyRelative("abilityLabel").objectReferenceValue).text =
                     state == 2 ? "<<< RECONSTRUCTING" : state == 3 ? "RECHARGING" : reverse ? "<<< REWINDING / 5x" : "MOVE TO RECORD";
                 if (state >= 4 && state < 8) ((TextMeshProUGUI)view.FindPropertyRelative("abilityLabel").objectReferenceValue).text =
-                    new[] { "P4 / TRACK LOCK", "P5 / DUAL PATTERN", "P6 / BAD SECTORS", "<< REW / P6" }[state - 4];
+                    new[] { "TRACK LOCK", "COMPOSITE ATTACK", "BAD SECTORS", "<< REWIND" }[state - 4];
                 ((TextMeshProUGUI)view.FindPropertyRelative("tapeTime").objectReferenceValue).text =
                     state == 2 ? "<< CAPTURE 30.0s / 30.0s" : state == 3 ? "COOLDOWN 2.0s" : reverse ? "<< 2.2s / 3.0s" : "2.2s / 3.0s";
                 if (state >= 9)
                 {
-                    clock.DisplayBossRta(144.39f, 1f, reverse, 7, reverse ? "FORCED REWIND / LOOP 01" : "REMEMBER. / LOOP 01");
-                    ((TextMeshProUGUI)view.FindPropertyRelative("abilityLabel").objectReferenceValue).text = reverse ? "MEMORY LOCK / << REW" : "P7 / REMEMBER.";
+                    clock.DisplayBossRta(144.39f, 1f, reverse, 7, reverse ? "FORCED REWIND" : "REMEMBER.");
+                    ((TextMeshProUGUI)view.FindPropertyRelative("abilityLabel").objectReferenceValue).text = reverse ? "MEMORY LOCK / << REW" : "REMEMBER.";
                     ((TextMeshProUGUI)view.FindPropertyRelative("tapeTime").objectReferenceValue).text = reverse ? "FORCED << 10.0s" : "COOLDOWN 2.0s";
                     terminal.text = reverse ? "> MEMORY LOCK.\n> OPERATOR CONTROL SEIZED.\n> FORCED REWIND INITIATED." : "> REMEMBER.\n> OPERATOR CONTROL RESTORED.";
                     terminal.maxVisibleCharacters = int.MaxValue;

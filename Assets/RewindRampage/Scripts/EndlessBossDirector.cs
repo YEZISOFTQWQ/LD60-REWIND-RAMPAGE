@@ -16,7 +16,7 @@ namespace RewindRampage
         internal void Add(EndlessArenaMechanic mechanic) { mechanics.Add(mechanic); }
         public bool Resolved
         {
-            get { if (mechanics.Count != (Phase == 7 ? Index == 3 ? 3 : Index == 4 ? 1 : 2 : Index >= 3 ? 2 : 1)) return false;
+            get { if (Plan == null || mechanics.Count != Plan.Events.Length) return false;
                 if (Memory != null && (Memory.State < MemoryLockState.BlindReplayActive || mechanics[0].Cursor < Memory.ReplayEnd)) return false;
                 foreach (EndlessArenaMechanic m in mechanics) if (!m.CurrentTimelineResolved || m.DamageWindowOpen) return false;
                 return true; }
@@ -41,6 +41,7 @@ namespace RewindRampage
         private readonly int[] roundCounts;
         private readonly HashSet<string> completionNotified = new HashSet<string>();
         private readonly Dictionary<string, float> phaseEnds = new Dictionary<string, float>();
+        private readonly HashSet<float> takeoffsPlayed = new HashSet<float>(), landingsPlayed = new HashSet<float>();
         private readonly BossPlayerHistory playerHistory;
         private MemoryLockAttempt forcing;
         private ReplayFrame playerPose;
@@ -53,6 +54,7 @@ namespace RewindRampage
         public event Action<ReplayFrame> ForcedPose;
         public event Action<MemoryLockAttempt> ForcedRewindFinished;
         public event Action OnP7Completed;
+        public event Action<float> ForwardAdvanced;
         private bool frozen;
         private int shownPhase = -1, shownRound = -1;
         public int RunId { get; }
@@ -71,11 +73,16 @@ namespace RewindRampage
         public int ForwardLandingCount { get; private set; }
         public int ForwardTakeoffCount { get; private set; }
         public int MechanicCount => Timeline.Count;
-        public int RoundCount(int phase) => roundCounts[phase - 4];
+        public int RoundCount(int phase, int loop = -1) => (loop < 0 ? LoopIndex : loop) > 0 ? 3 : roundCounts[phase - 4];
         public double MaximumPlanningMilliseconds { get; private set; }
-        public string PhaseCaption => (PhaseId == 4 ? "MAGNETIC IMPACT" : PhaseId == 5 ? "CORRUPTED SECTORS" : PhaseId == 6 ? "INTERFERENCE MATRIX" :
-            IsForcedRewinding ? "FORCED REWIND" : CurrentMemory != null && CurrentMemory.WarningSuppressed ? "REMEMBER." : "FINAL OVERWRITE") + " / LOOP " + (LoopIndex + 1).ToString("00");
-        public string Status => PhaseId == 4 ? Round == 0 ? "MASTER TAPE / INBOUND" : Round == 1 ? "TRACK LOCK" : Round == 2 ? "HEAD SWEEP" : "DUAL EXPOSURE"
+        public float TelegraphGlow
+        {
+            get { var r = HistoryAt(Rta); return r.Plan != null && r.Plan.Events.Length > 1 && Rta >= r.MechanicStart && Rta < r.End ? settings.Telegraphs.overlappingGlowMultiplier : 1f; }
+        }
+        public string PhaseCaption => PhaseId == 4 ? "MAGNETIC IMPACT" : PhaseId == 5 ? "CORRUPTED SECTORS" : PhaseId == 6 ? "INTERFERENCE MATRIX" : "FINAL OVERWRITE";
+        public string Status => IsForcedRewinding ? "CONTROL SEIZED" : CurrentMemory != null && CurrentMemory.WarningSuppressed ? "REMEMBER." :
+            LoopIndex > 0 ? CurrentMemory != null ? "MEMORY LOCK" : "COMPOSITE ATTACK" :
+            PhaseId == 4 ? Round == 0 ? "MASTER TAPE / INBOUND" : Round == 1 ? "TRACK LOCK" : Round == 2 ? "HEAD SWEEP" : "DUAL EXPOSURE"
             : PhaseId == 5 ? Round == 1 ? "BAD SECTORS" : Round == 2 ? "OVERWRITE" : "CORRUPTED OVERWRITE"
             : PhaseId == 6 ? Round == 1 ? "HEAD SWEEP" : Round == 2 ? "BAD SECTORS" : "INTERFERENCE PATTERN"
             : Round == 1 ? "SECTOR LOCK" : Round == 2 ? "CROSSOVER" : Round == 3 ? "MASTER RECORD" : IsForcedRewinding ? "CONTROL SEIZED" : CurrentMemory != null && CurrentMemory.WarningSuppressed ? "REMEMBER." : "MEMORY LOCK";
@@ -89,7 +96,7 @@ namespace RewindRampage
         public event Action OnP6Completed;
         public EndlessBossDirector(GameTuning tuning, EndlessSettings settings, EndlessVisuals visuals,
             Action<MechanicArea, MechanicFrame, int> damage, Func<int> nextPass,
-            Action<string> message = null, Action<float, bool> impact = null, Func<bool> playerAlive = null)
+            Action<string> message = null, Action<float, bool> impact = null, Func<bool> playerAlive = null, bool firstP7Test = false)
         {
             this.tuning = tuning; this.settings = settings; this.visuals = visuals; this.damage = damage;
             this.nextPass = nextPass; this.message = message; this.impact = impact; this.playerAlive = playerAlive ?? (() => true);
@@ -101,9 +108,10 @@ namespace RewindRampage
             // rewind again below the old frontier; clamping to frontier-3 would silently lose RTA.
             Timeline = new TemporalMechanicController(tuning.recordDuration, false); Timeline.Reset(0f, 0f);
             Motion = new TapeBossMotion(settings, tuning.arenaHalfSize);
-            rounds.Add(new BossRoundHistory(4, 1, 0f, Motion.EntryEnd));
+            PhaseId = firstP7Test ? 7 : 4;
+            rounds.Add(new BossRoundHistory(PhaseId, 1, 0f, Motion.EntryEnd));
             if (visuals != null) { Visual = new TapeBossVisual(visuals, settings); Visual.Present(Motion.Sample(0f), false); }
-            message?.Invoke("MASTER TAPE ONLINE.\nCONTROL UNIT ACTIVE.\nP4 / MAGNETIC IMPACT.");
+            message?.Invoke("MASTER TAPE ONLINE.\nCONTROL UNIT ACTIVE.");
         }
         private EndlessArenaMechanic First(int phase, int round, int slot)
         { BossRoundHistory r = FindRound(phase, round); return r != null && r.Mechanics.Count > slot ? r.Mechanics[slot] : null; }
@@ -111,7 +119,13 @@ namespace RewindRampage
         public BossRoundHistory FindRound(int phase, int round, int loop = -1)
         { if (loop < 0) loop = LoopIndex; foreach (BossRoundHistory r in rounds) if (r.Loop == loop && r.Phase == phase && r.Index == round) return r; return null; }
         public bool PhaseResolved(int phase, int loop = -1)
-        { if (loop < 0) loop = LoopIndex; for (int i = 1; i <= RoundCount(phase); i++) if (FindRound(phase, i, loop) == null || !FindRound(phase, i, loop).Resolved) return false; return true; }
+        { if (loop < 0) loop = LoopIndex; for (int i = 1; i <= RoundCount(phase, loop); i++) if (FindRound(phase, i, loop) == null || !FindRound(phase, i, loop).Resolved) return false; return true; }
+        public BossRoundHistory HistoryAt(float cursor)
+        {
+            BossRoundHistory current = rounds[0];
+            foreach (BossRoundHistory r in rounds) if (cursor >= r.Entry) current = r;
+            return current;
+        }
         public float PhaseEnd(int phase, int loop = -1) => phaseEnds.TryGetValue(PhaseKey(loop < 0 ? LoopIndex : loop, phase), out float end) ? end : float.PositiveInfinity;
         public void Tick(float deltaTime, float actualHistoryRewound, bool reverse, MechanicFrame frame, Vector2 facing = default)
         {
@@ -150,6 +164,7 @@ namespace RewindRampage
                 if (!playerAlive()) { Freeze(); Present(); return; }
                 CommitTrackPlans();
                 ProgressResolvedRounds();
+                if (!frozen) ForwardAdvanced?.Invoke(Rta);
                 PlayMotionImpulses(from, Rta);
                 TryIssueMemoryForce();
                 consumed += step; remaining -= step; Present();
@@ -165,7 +180,20 @@ namespace RewindRampage
                 Vector2 target = Vector2.Lerp(frame.PlayerStart, frame.PlayerEnd, Mathf.InverseLerp(from, to, r.MechanicStart));
                 Vector2 emitter = Motion.Sample(r.MechanicStart).Ground + Vector2.up * 0.3f;
                 planner.LoopIndex = r.Loop;
-                if ((r.Phase == 4 || r.Phase == 7) && r.Index != 2)
+                if (r.Loop > 0)
+                {
+                    if (BossPatternPlanner.OverloadKinds(r.Phase, r.Index)[0] == EndlessMechanicKind.TrackLock)
+                        Register(r, new BossPatternEvent(EndlessMechanicKind.TrackLock, r.MechanicStart, planner.OverloadTrack(r.Phase, r.Index, RunId, emitter), target));
+                    else
+                    {
+                        var watch = System.Diagnostics.Stopwatch.StartNew();
+                        r.Plan = planner.PlanOverload(r.Phase, r.Index, r.MechanicStart, target, emitter, RunId);
+                        MaximumPlanningMilliseconds = Math.Max(MaximumPlanningMilliseconds, watch.Elapsed.TotalMilliseconds);
+                        foreach (BossPatternEvent e in r.Plan.Events) Register(r, e);
+                        ArmCompositeMemory(r);
+                    }
+                }
+                else if ((r.Phase == 4 || r.Phase == 7) && r.Index != 2)
                 {
                     BossMechanicProfile track = r.Phase == 7 ? planner.P7Track(RunId, r.Index, emitter) : planner.TrackProfile(r.Index >= 3, RunId, emitter, r.Index);
                     Register(r, new BossPatternEvent(EndlessMechanicKind.TrackLock, r.MechanicStart, track, target));
@@ -183,17 +211,26 @@ namespace RewindRampage
         {
             foreach (BossRoundHistory r in rounds)
             {
-                if ((r.Phase != 4 && r.Phase != 7) || r.Index == 2 || r.Index == 4 && r.Phase == 7 || r.Plan != null || r.Mechanics.Count == 0 || !r.Mechanics[0].HasLocked) continue;
+                if (r.Plan != null || r.Mechanics.Count == 0 || r.Mechanics[0].Kind != EndlessMechanicKind.TrackLock || !r.Mechanics[0].HasLocked) continue;
                 EndlessArenaMechanic track = r.Mechanics[0];
                 var watch = System.Diagnostics.Stopwatch.StartNew();
                 planner.LoopIndex = r.Loop;
-                r.Plan = r.Phase == 7 ? planner.PlanP7Lock(track.Start, track.LockedCenter, track.BossProfile, RunId, r.Index) :
+                r.Plan = r.Loop > 0 ? planner.PlanOverload(r.Phase, r.Index, track.Start, track.LockedCenter, track.BossProfile.Emitter, RunId, track.BossProfile) :
+                    r.Phase == 7 ? planner.PlanP7Lock(track.Start, track.LockedCenter, track.BossProfile, RunId, r.Index) :
                     planner.PlanP4Lock(track.Start, track.LockAt, track.LockedCenter, track.BossProfile, r.Index >= 3, RunId, r.Index);
                 MaximumPlanningMilliseconds = Math.Max(MaximumPlanningMilliseconds, watch.Elapsed.TotalMilliseconds);
                 track.BossProfile.WarningSeconds = r.Plan.Events[0].Profile.WarningSeconds;
                 track.BossProfile.DamageSeconds = r.Plan.Events[0].Profile.DamageSeconds;
+                track.BossProfile.Telegraphs = r.Plan.Events[0].Profile.Telegraphs;
                 for (int i = 1; i < r.Plan.Events.Length; i++) Register(r, r.Plan.Events[i]);
+                ArmCompositeMemory(r);
             }
+        }
+        private void ArmCompositeMemory(BossRoundHistory r)
+        {
+            if (r.Loop == 0 || r.Index != RoundCount(r.Phase, r.Loop) || r.Memory != null) return;
+            r.Memory = new MemoryLockAttempt(RunId, r.Loop, r.Phase, r.Index, r.Entry, r.MechanicStart, r.Plan, settings.memoryPreparationSeconds);
+            playerHistory.EnsureCapacity(r.Memory.Trigger - r.Memory.Target + tuning.recordDuration + 0.5f);
         }
         private void Register(BossRoundHistory round, BossPatternEvent e)
         {
@@ -207,11 +244,11 @@ namespace RewindRampage
             // Retained per-loop history makes completion crossings reversible without duplicating plans.
             foreach (BossRoundHistory r in rounds)
             {
-                if (r.Index != RoundCount(r.Phase)) continue;
+                if (r.Index != RoundCount(r.Phase, r.Loop)) continue;
                 string key = PhaseKey(r.Loop, r.Phase);
                 if (!PhaseResolved(r.Phase, r.Loop) || completionNotified.Contains(key)) continue;
                 completionNotified.Add(key); phaseEnds[key] = r.End;
-                message?.Invoke("P" + r.Phase + " SEQUENCE COMPLETE.\n" + (r.Phase == 7 ? "LOOP " + (r.Loop + 2).ToString("00") + " / MASTER TAPE CONTINUES." : "MASTER TAPE: PHASE 0" + (r.Phase + 1) + "."));
+                message?.Invoke(r.Phase == 7 ? "OVERLOAD ACTIVE.\nMASTER TAPE CONTINUES." : "PLAYBACK COMPLETE.");
                 if (r.Phase == 4) OnP4Completed?.Invoke(); else if (r.Phase == 5) OnP5Completed?.Invoke(); else if (r.Phase == 6) OnP6Completed?.Invoke(); else OnP7Completed?.Invoke();
             }
             if (frozen) return;
@@ -219,7 +256,7 @@ namespace RewindRampage
             if (last.Resolved)
             {
                 if (last.Memory != null) last.Memory.State = MemoryLockState.Completed;
-                bool phaseFinished = last.Index == RoundCount(last.Phase);
+                bool phaseFinished = last.Index == RoundCount(last.Phase, last.Loop);
                 int loop = last.Loop + (phaseFinished && last.Phase == 7 ? 1 : 0);
                 int phase = phaseFinished ? last.Phase == 7 ? 4 : last.Phase + 1 : last.Phase;
                 int index = phaseFinished ? 1 : last.Index + 1;
@@ -233,9 +270,11 @@ namespace RewindRampage
                     TapeBossMotion.Jump jump = Motion.AddJump(entry + settings.bossRoundRestSeconds, new Vector2(x, Motion.InitialAnchor.y));
                     start = jump.End;
                 }
-                var next = new BossRoundHistory(phase, index, entry, phase == 7 && index == 4 ? entry + settings.memoryFirstTelegraphTime : start, loop);
+                bool originalMemory = loop == 0 && phase == 7 && index == 4;
+                if (loop > 0 && index == RoundCount(phase, loop)) start = Mathf.Max(start, entry + settings.memoryPreparationSeconds);
+                var next = new BossRoundHistory(phase, index, entry, originalMemory ? entry + settings.memoryFirstTelegraphTime : start, loop);
                 rounds.Add(next);
-                if (phase == 7 && index == 4)
+                if (originalMemory)
                 {
                     planner.LoopIndex = loop;
                     float target = entry + settings.memoryForcedTriggerTime - settings.memoryForcedRewindHistorySeconds;
@@ -266,7 +305,7 @@ namespace RewindRampage
         private void StepForced(float dt, float playerClock)
         {
             MemoryLockAttempt memory = forcing;
-            float target = Mathf.Max(memory.Target, Rta - dt * settings.memoryForcedRewindHistorySeconds / settings.memoryForceRewindVisualSeconds);
+            float target = Mathf.Max(memory.Target, Rta - dt * (memory.Trigger - memory.Target) / settings.memoryForceRewindVisualSeconds);
             int index = memory.PlayerHistory.FindFrame(Rta - 0.0001f);
             // Visit every historical corner, including compressed low-frame-rate playback.
             while (index >= 0 && memory.PlayerHistory.Frames[index].Time > target + 0.00001f)
@@ -289,21 +328,19 @@ namespace RewindRampage
             if (Cross(from, to, Motion.EntryLanding)) Land(settings.bossEntryLandingShakeAmplitude);
             foreach (TapeBossMotion.Jump jump in Motion.Jumps)
             {
-                if (Cross(from, to, jump.Takeoff)) { ForwardTakeoffCount++; impact?.Invoke(settings.bossTakeoffShakeAmplitude * settings.cameraShakeScale, false); }
-                if (Cross(from, to, jump.Landing)) Land(settings.bossLandingShakeAmplitude);
+                if (Cross(from, to, jump.Takeoff) && (HistoryAt(jump.Takeoff).Loop == 0 || takeoffsPlayed.Add(jump.Takeoff))) { ForwardTakeoffCount++; impact?.Invoke(settings.bossTakeoffShakeAmplitude * settings.cameraShakeScale, false); }
+                if (Cross(from, to, jump.Landing) && (HistoryAt(jump.Landing).Loop == 0 || landingsPlayed.Add(jump.Landing))) Land(settings.bossLandingShakeAmplitude);
             }
         }
         private void Land(float amplitude) { ForwardLandingCount++; impact?.Invoke(amplitude * settings.cameraShakeScale, true); }
         private static bool Cross(float from, float to, float at) => from < at && to >= at;
         private void Present()
         {
-            BossRoundHistory current = rounds[0];
-            foreach (BossRoundHistory r in rounds) if (Rta >= r.Entry) current = r;
+            BossRoundHistory current = HistoryAt(Rta);
             PhaseId = current.Phase; LoopIndex = current.Loop; CurrentMemory = current.Memory;
             Round = LoopIndex == 0 && Rta < Motion.EntryEnd ? 0 : current.Index;
             if (!IsReversing && (PhaseId != shownPhase || Round != shownRound))
-            { shownPhase = PhaseId; shownRound = Round; if (Round > 0) message?.Invoke("P" + PhaseId + " / ROUND " + Round + "/" + RoundCount(PhaseId) + " / " + Status + "." +
-                (PhaseId != 7 && Round == 4 ? "\nMIRROR PASS." : PhaseId != 7 && Round >= 5 ? "\nFINAL COMBINED PASS." : "")); }
+            { shownPhase = PhaseId; shownRound = Round; if (Round > 0) message?.Invoke(Status + "."); }
             Visual?.Present(Motion.Sample(Rta), IsReversing);
             Visual?.PresentMechanism(Rta, current);
             Visual?.PresentMemory(Rta, CurrentMemory, IsForcedRewinding);

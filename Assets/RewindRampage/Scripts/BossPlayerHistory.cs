@@ -22,6 +22,16 @@ namespace RewindRampage
             FirstTelegraph = entry + s.memoryFirstTelegraphTime; Trigger = entry + s.memoryForcedTriggerTime;
             Target = Trigger - s.memoryForcedRewindHistorySeconds; ReplayEnd = entry + s.memoryReplayResolvedTime;
         }
+        public MemoryLockAttempt(int run, int loop, int phase, int round, float entry,
+            float firstTelegraph, BossPatternPlan answer, float preparationSeconds)
+        {
+            Identity = run + ":" + loop + ":" + phase + ":" + round;
+            RecordStart = Target = entry; FirstTelegraph = firstTelegraph; Answer = answer;
+            ReplayEnd = answer.ResolvedAt; Trigger = ReplayEnd + 1f;
+            if (preparationSeconds <= 0f || FirstTelegraph - Target < preparationSeconds - 0.001f ||
+                ReplayEnd <= FirstTelegraph || Target < 0f)
+                throw new InvalidOperationException("Invalid composite MEMORY LOCK: require real preparation history before the first telegraph and complete attack recovery.");
+        }
     }
 
     // This is a bounded pose cache over the SAME Boss cursor, not a second simulation clock.
@@ -29,10 +39,17 @@ namespace RewindRampage
     // before seeking, so no input, AI or route solver is run to reconstruct player motion.
     public sealed class BossPlayerHistory
     {
-        private readonly float capacity;
+        private float capacity;
         private readonly List<ReplayFrame> frames = new List<ReplayFrame>(900);
         public int Count => frames.Count;
         public BossPlayerHistory(float capacitySeconds) { capacity = capacitySeconds; }
+        // Reserve before the long first pass, never shorten a force to fit the ordinary tape.
+        public void EnsureCapacity(float seconds)
+        {
+            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds <= 0f)
+                throw new InvalidOperationException("Invalid MEMORY LOCK history reservation.");
+            capacity = Mathf.Max(capacity, seconds);
+        }
         public void Record(float time, Vector2 position, Vector2 facing, bool reverse)
         {
             while (frames.Count > 0 && frames[frames.Count - 1].Time >= time - 0.00001f) frames.RemoveAt(frames.Count - 1);

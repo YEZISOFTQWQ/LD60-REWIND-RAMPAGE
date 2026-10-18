@@ -90,7 +90,7 @@ namespace RewindRampage.Validation
                         if (round >= 3 && activeCombination && !observations.Contains(capture))
                         {
                             object view = Field(Field(game, "hud"), "view");
-                            Assert.That(Text(Field(view, "abilityLabel"), "text"), Does.StartWith("P" + phase));
+                            Assert.That(Text(Field(view, "abilityLabel"), "text"), Does.Not.Match(@"\bP[1-7]\b|\bLOOP\s*\d"));
                             CaptureWorld("Logs/V090-PlayMode-P" + phase + "-R" + round + ".png");
                             observations.Add(capture);
                         }

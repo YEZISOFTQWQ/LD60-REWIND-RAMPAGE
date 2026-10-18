@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace RewindRampage
 {
-    // P4-P6 presentation of the existing field attacks; geometry comes from BossFieldGeometry.
+    // Reads fixed field geometry and a reversible presentation schedule. Never owns damage.
     public sealed class BossFieldView : IDisposable
     {
         private readonly EndlessMechanicKind kind;
@@ -12,145 +12,134 @@ namespace RewindRampage
         private readonly BossMechanicProfile p;
         private readonly Vector2 half;
         private readonly EndlessSettings settings;
+        private readonly TelegraphSettings style;
+        private readonly Camera camera;
         private readonly Transform root;
         private readonly EndlessAreaView[] views;
         private readonly TextMeshPro[] labels;
-        private readonly LineRenderer arrow, link, gapPath;
-        private readonly TextMeshPro state;
+        private readonly LineRenderer arrow, gapPath;
         public int VisibleWarnings { get; private set; }
         public int VisibleExplosions { get; private set; }
+        public int PreviewStep { get; private set; } = -1;
         public BossFieldView(EndlessMechanicKind kind, float birth, BossMechanicProfile profile, Vector2 half, EndlessSettings settings, EndlessVisuals visuals)
         {
             this.kind = kind; this.birth = birth; p = profile; this.half = half; this.settings = settings;
+            style = settings.Telegraphs; camera = Camera.main;
             root = new GameObject("Boss field " + p.HistoryKey + " / " + kind).transform; root.SetParent(visuals.Root, false);
             views = new EndlessAreaView[Mathf.Max(12, p.Rows * p.Cols + 2)];
-            for (int i = 0; i < views.Length; i++) views[i] = visuals.Area(kind + " area " + i, root);
-            int labelCount = kind == EndlessMechanicKind.BadSectors ? p.Rows * p.Cols : kind == EndlessMechanicKind.Overwrite ? p.StripCount : 0;
-            labels = new TextMeshPro[labelCount];
-            for (int i = 0; i < labels.Length; i++)
+            for (int i = 0; i < views.Length; i++) { views[i] = visuals.Area(kind + " area " + i, root); views[i].PrioritizeBoundary(10); }
+            int count = kind == EndlessMechanicKind.BadSectors ? p.Rows * p.Cols : kind == EndlessMechanicKind.Overwrite ? p.StripCount : 0;
+            labels = new TextMeshPro[count];
+            for (int i = 0; i < count; i++)
             {
-                labels[i] = Label("Ordered cell " + i, visuals.Art, 3.8f);
+                var label = new GameObject("Wave/preview index " + i, typeof(TextMeshPro)).GetComponent<TextMeshPro>(); labels[i] = label;
+                label.transform.SetParent(root, false); label.font = visuals.Art.font; label.fontSize = 3f;
+                label.alignment = TextAlignmentOptions.Center; label.enableWordWrapping = false;
+                label.rectTransform.sizeDelta = new Vector2(2f, 0.7f); label.GetComponent<MeshRenderer>().sortingOrder = 9;
                 Rect rect = kind == EndlessMechanicKind.BadSectors ? BossFieldGeometry.Sector(i, half, p) : BossFieldGeometry.Strip(i, half, p);
-                labels[i].transform.position = rect.center;
-                labels[i].text = kind == EndlessMechanicKind.BadSectors ? p.LetterWaveLabels ? ((char)('A' + p.SectorGroups[i] - 1)).ToString() : p.SectorGroups[i].ToString() : (i + 1).ToString();
+                label.transform.position = rect.center;
+                label.text = kind == EndlessMechanicKind.BadSectors ? p.LetterWaveLabels ? ((char)('A' + p.SectorGroups[i] - 1)).ToString() : p.SectorGroups[i].ToString() : (i + 1).ToString();
             }
-            arrow = ReplayVisuals.Line("Direction / safe exit", root, visuals.Art, 0.06f, GameArt.Gold, 8); arrow.positionCount = 5;
-            link = ReplayVisuals.Line("Emitter to mechanism", root, visuals.Art, 0.035f, GameArt.Gold, 0); link.positionCount = 2;
-            gapPath = ReplayVisuals.Line("Recorded gap trajectory", root, visuals.Art, 0.04f, GameArt.Cyan, 9);
+            arrow = ReplayVisuals.Line("Preview direction", root, visuals.Art, 0.04f, GameArt.Gold, 11); arrow.positionCount = 5;
+            gapPath = ReplayVisuals.Line("Recorded sweep gap", root, visuals.Art, 0.035f, GameArt.Cyan, 11);
             gapPath.sharedMaterial = visuals.DashedMaterial; gapPath.textureMode = LineTextureMode.Tile;
-            state = Label("Mechanism state", visuals.Art, 2.5f);
-            Present(birth - 1f, Vector2.zero, false);
-        }
-        private TextMeshPro Label(string name, GameArt art, float size)
-        {
-            TextMeshPro text = new GameObject(name, typeof(TextMeshPro)).GetComponent<TextMeshPro>(); text.transform.SetParent(root, false);
-            text.font = art.font; text.fontSize = size; text.alignment = TextAlignmentOptions.Center; text.enableWordWrapping = false;
-            text.rectTransform.sizeDelta = new Vector2(7f, 1f); text.GetComponent<MeshRenderer>().sortingOrder = 10; return text;
+            Present(birth - 100f, Vector2.zero, false);
         }
         public void Present(float time, Vector2 target, bool reverse, bool suppressTelegraph = false)
         {
-            VisibleWarnings = VisibleExplosions = 0;
+            VisibleWarnings = VisibleExplosions = 0; PreviewStep = -1;
+            foreach (var view in views) view.Hide(); foreach (var label in labels) label.gameObject.SetActive(false);
+            arrow.enabled = gapPath.enabled = false;
             float attack = BossFieldGeometry.AttackAt(birth, p), end = BossFieldGeometry.End(kind, birth, p);
-            bool visible = time >= birth && time < end + p.RecoverySeconds;
+            TelegraphPreview preview = kind == EndlessMechanicKind.Overwrite && p.Telegraphs != null ? p.Telegraphs.Preview(p.HistoryKey, time, suppressTelegraph) : TelegraphPreview.Hidden;
+            bool visible = preview.Visible || time >= birth && time < end;
             root.gameObject.SetActive(visible); if (!visible) return;
-            foreach (EndlessAreaView view in views) view.Hide();
-            arrow.enabled = link.enabled = gapPath.enabled = false; state.gameObject.SetActive(false);
-            bool warning = time < attack; float progress = Mathf.InverseLerp(birth, attack, time);
-            Color red = reverse ? HazardVisualLanguage.Reverse(time) : HazardVisualLanguage.Active(time - attack);
-            Color amber = reverse ? HazardVisualLanguage.Reverse(time) : HazardVisualLanguage.Warning(progress, time);
-            if (suppressTelegraph)
-            {
-                foreach (TextMeshPro label in labels) label.gameObject.SetActive(false);
-                if (reverse || warning) return;
-            }
+            bool warning = time < attack;
+            Color active = reverse ? HazardVisualLanguage.Reverse(time) : HazardVisualLanguage.Active(time - attack);
+            Color amber = HazardVisualLanguage.Warning(Mathf.InverseLerp(birth, attack, time), time);
+            float width = style.WorldOutline(camera);
             if (kind == EndlessMechanicKind.TrackLock)
             {
-                bool follow = time < birth + p.FollowSeconds;
-                Color color = follow ? amber : red;
-                if (!reverse && time >= birth + p.FollowSeconds && time < birth + p.FollowSeconds + 0.15f) color = Color.white;
-                if (!warning && !reverse) color = Color.Lerp(Color.white, red, Mathf.Clamp01((time - attack) / 0.15f));
-                if (time >= end) color.a = Mathf.Clamp01((end + p.RecoverySeconds - time) / p.RecoverySeconds) * 0.25f;
-                views[0].Show(new MechanicArea(target, p.Radius), color, warning ? settings.warningFillAlpha : settings.attackFillAlpha, reverse, warning ? progress : -1f, 0.07f);
-                link.enabled = follow; link.SetPosition(0, p.Emitter); link.SetPosition(1, target); link.startColor = link.endColor = amber;
-                Vector2 escape = (target - p.Emitter).normalized; if (escape.sqrMagnitude < 0.1f) escape = Vector2.up;
-                DrawArrow(target + escape * (p.Radius + 0.35f), escape, warning ? amber : red);
-                state.gameObject.SetActive(warning); state.transform.position = target + Vector2.up * (p.Radius + 0.5f);
-                state.text = follow ? "LOCKING" : "LOCKED"; state.color = color;
-                if (suppressTelegraph) { arrow.enabled = link.enabled = false; state.gameObject.SetActive(false); if (time >= end) views[0].Hide(); }
+                if (warning)
+                {
+                    if (suppressTelegraph) return;
+                    bool tracking = time < birth + p.FollowSeconds;
+                    Color pale = style.trackingColor; pale.a = tracking ? style.trackingOutlineAlpha : style.lockedOutlineAlpha;
+                    views[0].Show(new MechanicArea(target, p.Radius), pale, tracking ? style.trackingFillAlpha : style.lockedFillAlpha,
+                        tracking, -1f, width * (tracking ? 1f : 1.2f)); VisibleWarnings = 1;
+                }
+                else
+                {
+                    views[0].Show(new MechanicArea(target, p.Radius), active, settings.attackFillAlpha, false, -1f, width * 1.8f);
+                    VisibleExplosions = 1;
+                }
             }
             else if (kind == EndlessMechanicKind.HeadSweep)
             {
-                float now = warning ? attack : Mathf.Min(time, end), x = BossFieldGeometry.SweepX(now, birth, half, p), y = BossFieldGeometry.GapY(now, birth, p);
-                Color color = warning ? amber : red;
-                if (time < end)
+                if (warning && suppressTelegraph) return;
+                float now = warning ? attack : time;
+                float x = BossFieldGeometry.SweepX(now, birth, half, p), y = BossFieldGeometry.GapY(now, birth, p);
+                Color color = warning ? amber : active;
+                views[0].Show(new MechanicArea(Rect.MinMaxRect(x - p.SweepWidth * 0.5f, -half.y, x + p.SweepWidth * 0.5f, y - p.GapWidth * 0.5f)), color, warning ? 0f : 0.24f, false, -1f, width * 1.7f);
+                views[1].Show(new MechanicArea(Rect.MinMaxRect(x - p.SweepWidth * 0.5f, y + p.GapWidth * 0.5f, x + p.SweepWidth * 0.5f, half.y)), color, warning ? 0f : 0.24f, false, -1f, width * 1.7f);
+                if (warning) VisibleWarnings = 2; else VisibleExplosions = 2;
+                if (!suppressTelegraph)
                 {
-                    views[0].Show(new MechanicArea(Rect.MinMaxRect(x - p.SweepWidth * 0.5f, -half.y, x + p.SweepWidth * 0.5f, y - p.GapWidth * 0.5f)), color, warning ? 0.08f : 0.24f, reverse, -1f, 0.08f);
-                    views[1].Show(new MechanicArea(Rect.MinMaxRect(x - p.SweepWidth * 0.5f, y + p.GapWidth * 0.5f, x + p.SweepWidth * 0.5f, half.y)), color, warning ? 0.08f : 0.24f, reverse, -1f, 0.08f);
-                    views[4].Show(new MechanicArea(new Rect(x - 0.8f, y - p.GapWidth * 0.5f, 1.6f, p.GapWidth)), new Color(0.3f, 0.9f, 0.88f, 0.9f), 0.04f, reverse, -1f, 0.06f);
+                    views[4].PrioritizeBoundary(11);
+                    views[4].Show(new MechanicArea(new Rect(x - 0.65f, y - p.GapWidth * 0.5f, 1.3f, p.GapWidth)), GameArt.Cyan, 0f, false, -1f, width * 1.3f);
+                    gapPath.enabled = true; gapPath.positionCount = 25;
+                    for (int i = 0; i < 25; i++) { float at = Mathf.Lerp(attack, end, i / 24f); gapPath.SetPosition(i, new Vector3(BossFieldGeometry.SweepX(at, birth, half, p), BossFieldGeometry.GapY(at, birth, p))); }
+                    gapPath.startWidth = gapPath.endWidth = width;
+                    DrawArrow(new Vector2(Mathf.Clamp(x, -half.x + 2f, half.x - 2f), y), Vector2.right * (p.RightToLeft ? -1f : 1f), amber, width);
                 }
-                gapPath.enabled = time < end; gapPath.positionCount = 25;
-                for (int i = 0; i < 25; i++) { float t = Mathf.Lerp(attack, end, i / 24f); gapPath.SetPosition(i, new Vector3(BossFieldGeometry.SweepX(t, birth, half, p), BossFieldGeometry.GapY(t, birth, p))); }
-                gapPath.startColor = gapPath.endColor = reverse ? EndlessVisuals.RewindColor : new Color(0.3f, 0.85f, 0.83f, 0.65f);
-                if (warning)
-                {
-                    // Entire threatened side is readable before the moving gap begins.
-                    float bottom = Mathf.Min(p.GapY, p.GapEndY) - p.GapWidth * 0.5f, top = Mathf.Max(p.GapY, p.GapEndY) + p.GapWidth * 0.5f;
-                    views[2].Show(new MechanicArea(Rect.MinMaxRect(-half.x, -half.y, half.x, bottom)), amber, 0.035f, true, progress);
-                    views[3].Show(new MechanicArea(Rect.MinMaxRect(-half.x, top, half.x, half.y)), amber, 0.035f, true, progress);
-                }
-                float sign = (p.RightToLeft ? -1f : 1f) * (reverse ? -1f : 1f);
-                DrawArrow(new Vector2(Mathf.Clamp(x, -half.x + 2f, half.x - 2f), y), Vector2.right * sign, color);
-                link.enabled = warning; link.SetPosition(0, p.Emitter); link.SetPosition(1, new Vector2(x, -half.y)); link.startColor = link.endColor = amber;
-                if (suppressTelegraph) { arrow.enabled = link.enabled = gapPath.enabled = false; views[4].Hide(); }
             }
             else if (kind == EndlessMechanicKind.BadSectors)
             {
-                int currentWave = 0;
-                while (currentWave < p.WaveCount - 1 && time >= attack + currentWave * p.WaveInterval + p.WaveDamageSeconds) currentWave++;
+                int next = 0;
+                while (next < p.WaveCount && time >= BossFieldGeometry.WindowUntil(kind, birth, p, next)) next++;
+                bool primary = p.Telegraphs == null || p.Telegraphs.MainSectorsAllowed(time, suppressTelegraph);
                 for (int cell = 0; cell < p.SectorGroups.Length; cell++)
                 {
-                    int wave = p.SectorGroups[cell] - 1; float at = attack + wave * p.WaveInterval;
-                    bool active = time >= at && time < at + p.WaveDamageSeconds, done = time >= at + p.WaveDamageSeconds;
-                    labels[cell].gameObject.SetActive(!suppressTelegraph);
-                    if (suppressTelegraph && (!active || reverse)) continue;
-                    if (active && !reverse) VisibleExplosions++; else if (!done) VisibleWarnings++;
-                    bool future = wave > currentWave; Color color = done ? new Color(0.22f, 0.36f, 0.4f, 0.35f) : active ? HazardVisualLanguage.Active(time - at) : future ? amber : Color.Lerp(amber, red, 0.65f);
-                    if (reverse) color = HazardVisualLanguage.Reverse(time);
-                    if (!active && !done) color.a = future ? 0.55f : 0.85f;
-                    labels[cell].color = color;
-                    views[cell].Show(new MechanicArea(BossFieldGeometry.Sector(cell, half, p)), color, active ? 0.23f : done ? 0.015f : future ? 0.025f : 0.055f,
-                        reverse || future, !done && !future && !active ? Mathf.InverseLerp(wave == 0 ? birth : at - p.WaveInterval, at, time) : -1f, active ? 0.075f : 0.04f);
+                    int wave = p.SectorGroups[cell] - 1;
+                    float at = BossFieldGeometry.WindowAt(kind, birth, p, wave), until = BossFieldGeometry.WindowUntil(kind, birth, p, wave);
+                    bool live = time >= at && time < until;
+                    if (!live && (time >= until || suppressTelegraph)) continue;
+                    Color color = live ? (reverse ? HazardVisualLanguage.Reverse(time) : HazardVisualLanguage.Active(time - at)) : amber;
+                    if (!live) color.a = wave == next ? style.nearImpactOutlineAlpha : style.futureOutlineAlpha;
+                    float fill = live ? settings.attackFillAlpha : primary ? style.sectorFillAlpha * (wave == next ? 0.3f : 0.06f) : 0f;
+                    views[cell].Show(new MechanicArea(BossFieldGeometry.Sector(cell, half, p)), color, fill,
+                        !live && wave != next, -1f, width * (live || wave == next ? 1.2f : 0.7f));
+                    if (live) VisibleExplosions++; else { VisibleWarnings++; labels[cell].gameObject.SetActive(primary); labels[cell].color = color; }
                 }
             }
             else
             {
-                int front = Mathf.Clamp(Mathf.FloorToInt((time - attack) / p.AdvanceInterval), 0, p.StripCount - 1);
+                // The only future geometry is this one step, during its sealed preview slot.
+                if (preview.Visible)
+                {
+                    PreviewStep = preview.Step; Color color = GameArt.Gold; color.a = preview.Alpha;
+                    Rect rect = BossFieldGeometry.Strip(preview.Step, half, p);
+                    views[preview.Step].Show(new MechanicArea(rect), color, 0.06f, true, -1f, width);
+                    labels[preview.Step].gameObject.SetActive(true); labels[preview.Step].color = color; VisibleWarnings++;
+                    DrawArrow(rect.center, (p.VerticalBands ? Vector2.up : Vector2.right) * (p.RightToLeft ? -1f : 1f), color, width);
+                }
                 for (int band = 0; band < p.StripCount; band++)
                 {
-                    float at = attack + band * p.AdvanceInterval; bool active = time >= at && time < at + p.HoldSeconds;
-                    bool future = time < at, current = band == front;
-                    labels[band].gameObject.SetActive(!suppressTelegraph);
-                    if (suppressTelegraph && !active) continue;
-                    Color color = active ? HazardVisualLanguage.Active(time - at) : future ? amber : new Color(0.22f, 0.36f, 0.4f, 0.28f);
-                    if (active && !current) color.a = 0.65f; else if (future) color.a = current || band == front + 1 ? 0.7f : 0.25f;
-                    if (reverse) color = HazardVisualLanguage.Reverse(time);
-                    labels[band].color = color;
-                    views[band].Show(new MechanicArea(BossFieldGeometry.Strip(band, half, p)), color,
-                        active ? current ? 0.22f : 0.12f : 0.02f, reverse || future, warning && current ? progress : -1f, current ? 0.08f : 0.035f);
+                    float at = BossFieldGeometry.WindowAt(kind, birth, p, band), until = BossFieldGeometry.WindowUntil(kind, birth, p, band);
+                    if (time < at || time >= until) continue;
+                    Color color = reverse ? HazardVisualLanguage.Reverse(time) : HazardVisualLanguage.Active(time - at);
+                    views[band].Show(new MechanicArea(BossFieldGeometry.Strip(band, half, p)), color, settings.attackFillAlpha, false, -1f, width * 1.6f);
+                    VisibleExplosions++;
                 }
-                Rect strip = BossFieldGeometry.Strip(front, half, p);
-                DrawArrow(strip.center, (p.VerticalBands ? Vector2.up : Vector2.right) * (p.RightToLeft ? -1f : 1f) * (reverse ? -1f : 1f), warning ? amber : red);
-                state.gameObject.SetActive(time < end); state.transform.position = strip.center + Vector2.up * 0.75f;
-                state.text = warning ? "OVERWRITE >" : "HOLD / " + (front + 1); state.color = warning ? amber : red;
-                if (suppressTelegraph) { arrow.enabled = false; state.gameObject.SetActive(false); }
             }
         }
-        private void DrawArrow(Vector2 center, Vector2 direction, Color color)
+        private void DrawArrow(Vector2 center, Vector2 direction, Color color, float width)
         {
-            Vector2 side = new Vector2(-direction.y, direction.x);
-            arrow.enabled = true; arrow.startColor = arrow.endColor = color;
-            arrow.SetPositions(new[] { (Vector3)(center - direction), (Vector3)(center + direction), (Vector3)(center + direction * 0.65f + side * 0.3f),
-                (Vector3)(center + direction), (Vector3)(center + direction * 0.65f - side * 0.3f) });
+            Vector2 side = new Vector2(-direction.y, direction.x); arrow.enabled = true;
+            arrow.startColor = arrow.endColor = color; arrow.startWidth = arrow.endWidth = width;
+            arrow.SetPosition(0, center - direction * 0.6f); arrow.SetPosition(1, center + direction * 0.6f);
+            arrow.SetPosition(2, center + direction * 0.3f + side * 0.2f); arrow.SetPosition(3, center + direction * 0.6f);
+            arrow.SetPosition(4, center + direction * 0.3f - side * 0.2f);
         }
         public void Dispose() { if (root != null) EndlessVisuals.Release(root.gameObject); }
     }

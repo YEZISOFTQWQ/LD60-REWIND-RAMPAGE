@@ -14,6 +14,12 @@ namespace RewindRampage
         private float moveSpeed;
         private float visualTime;
         private int health;
+        private float telegraphGlow = 1f, haloAlpha;
+        public void SetTelegraphGlow(float multiplier)
+        {
+            telegraphGlow = Mathf.Clamp01(multiplier);
+            Color color = halo.color; color.a = haloAlpha * telegraphGlow; halo.color = color;
+        }
 
         public bool IsAlive { get; private set; }
         public bool IsArmed => warningRemaining <= 0f;
@@ -72,7 +78,8 @@ namespace RewindRampage
             body.color = color;
             core.color = IsVolatile ? new Color(1f, 0.81f, 0.42f) : frozen ? new Color(1f, 0.93f, 0.7f) : new Color(0.3f, 0.045f, 0.09f);
             core.transform.localScale = Vector3.one * (IsArmed ? 0.36f : spawn * 0.36f);
-            halo.color = new Color(color.r, color.g, color.b, IsArmed ? 0.22f : 0.08f + 0.15f * Mathf.Sin(spawn * 20f));
+            haloAlpha = IsArmed ? 0.22f : 0.08f + 0.15f * Mathf.Sin(spawn * 20f);
+            halo.color = new Color(color.r, color.g, color.b, haloAlpha * telegraphGlow);
             halo.transform.localScale = Vector3.one * (IsArmed ? 1.8f : 2.8f - spawn);
             if (IsVolatile) halo.transform.localScale *= 1.2f + Mathf.Sin(visualTime * 6f) * 0.08f;
             body.transform.localScale = Vector3.one * (IsArmed ? 0.64f : 0.95f - spawn * 0.31f);

@@ -12,6 +12,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 03340bda942dfa348be6d0452ce29513, type: 3}
   m_Name: EndlessTuning
   m_EditorClassIdentifier: 
+  telegraphs:
+    trackingColor: {r: 0.94, g: 0.57, b: 0.63, a: 1}
+    trackingFillAlpha: 0.12
+    trackingOutlineAlpha: 0.78
+    lockedFillAlpha: 0.15
+    lockedOutlineAlpha: 0.96
+    outlinePixels: 2
+    sectorFillAlpha: 0.25
+    nearImpactOutlineAlpha: 1
+    futureOutlineAlpha: 0.38
+    overwritePreviewLead: 2.4
+    overwriteStepHold: 0.28
+    overwriteExitFade: 0.12
+    overwriteExecutionGap: 0.6
+    overwritePreviewAlpha: 0.65
+    overlappingGlowMultiplier: 0.35
   p1SpawnInterval: 0.55
   p1OpeningSpawnInterval: 0.95
   p1GatherDuration: 2.5

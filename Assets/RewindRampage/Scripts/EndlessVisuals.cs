@@ -36,6 +36,11 @@ namespace RewindRampage
         private readonly LineRenderer edge;
         private readonly LineRenderer motion;
         public bool IsVisible => edge.enabled;
+        public MechanicArea CurrentArea { get; private set; }
+        public bool IsDashed => edge.sharedMaterial == factory.DashedMaterial;
+        public Color FillColor => fill.color;
+        public Color OutlineColor => edge.startColor;
+        public float OutlineWidth => edge.startWidth;
         public EndlessAreaView(EndlessVisuals factory, string name, Transform parent)
         {
             this.factory = factory;
@@ -47,6 +52,7 @@ namespace RewindRampage
         }
         public void Show(MechanicArea area, Color color, float fillAlpha = 0.08f, bool dashed = false, float progress = -1f, float width = 0.055f)
         {
+            CurrentArea = area;
             fill.enabled = edge.enabled = true; fill.sprite = area.Circular ? factory.Art.disc : factory.Square;
             fill.transform.position = area.Center;
             fill.transform.localScale = area.Circular ? Vector3.one * area.Radius * 2f : new Vector3(area.Rectangle.width, area.Rectangle.height, 1f);
@@ -70,6 +76,7 @@ namespace RewindRampage
             }
         }
         public void Hide() { fill.enabled = edge.enabled = motion.enabled = false; }
+        public void PrioritizeBoundary(int order) { edge.sortingOrder = motion.sortingOrder = order; }
     }
 
     // Draw only exposed arcs of the true circles. Collision keeps the full, exact circle union.

@@ -5,6 +5,9 @@ namespace RewindRampage
     [CreateAssetMenu(menuName = "Rewind Rampage/Endless tuning")]
     public sealed class EndlessSettings : ScriptableObject
     {
+        [Header("Telegraph presentation / no damage or spawn tuning")]
+        public TelegraphSettings telegraphs = new TelegraphSettings();
+        public TelegraphSettings Telegraphs => telegraphs ?? (telegraphs = new TelegraphSettings());
         public const float P1Duration = 30f, P3Duration = 30f;
         [Header("P1 / v0.4 first-playtest values (independent of story)")]
         [Min(0.1f)] public float p1SpawnInterval = 0.55f;

@@ -39,7 +39,7 @@ namespace RewindRampage
                     events.Add(new BossPatternEvent(EndlessMechanicKind.HeadSweep, locked + 0.7f, sweep, center));
                 }
                 BossPatternEvent[] fixedEvents = events.ToArray();
-                if (BossSafeRouteSolver.TrySolve(fixedEvents, center, locked, tuning, settings, out List<BossRoutePoint> route))
+                if (TrySolvePrepared(fixedEvents, center, locked, out List<BossRoutePoint> route))
                     return new BossPatternPlan(fixedEvents, route, candidate);
             }
             throw new InvalidOperationException("P7 TRACK LOCK combination has no normal-speed safe route from the actual lock position.");
@@ -61,7 +61,7 @@ namespace RewindRampage
                     new BossPatternEvent(EndlessMechanicKind.Overwrite, birth + settings.p7CrossoverOverwriteOffset, overwrite, player) };
                 float overlap = Mathf.Min(events[0].End, events[1].End) - Mathf.Max(BossFieldGeometry.AttackAt(events[0].Birth, sweep), BossFieldGeometry.AttackAt(events[1].Birth, overwrite));
                 if (overlap < settings.p7MinimumCrossoverOverlap || !HasActualOverlap(events[0], events[1])) continue;
-                if (BossSafeRouteSolver.TrySolve(events, player, birth, tuning, settings, out List<BossRoutePoint> route))
+                if (TrySolvePrepared(events, player, birth, out List<BossRoutePoint> route))
                     return new BossPatternPlan(events, route, candidate);
             }
             throw new InvalidOperationException("P7 CROSSOVER has no reachable sweep/overwrite route with real overlapping damage windows.");
@@ -80,7 +80,7 @@ namespace RewindRampage
                 p.RecoverySeconds = Mathf.Max(settings.p4MechanicRecoverySeconds,
                     settings.memoryReplayResolvedTime - settings.memorySecondWaveExplosionTime - p.WaveDamageSeconds);
                 var events = new[] { new BossPatternEvent(EndlessMechanicKind.BadSectors, entry + settings.memoryFirstTelegraphTime, p, player) };
-                if (BossSafeRouteSolver.TrySolve(events, player, target, tuning, settings, out List<BossRoutePoint> route))
+                if (TrySolvePrepared(events, player, target, out List<BossRoutePoint> route))
                     return new BossPatternPlan(events, route, candidate);
             }
             throw new InvalidOperationException("MEMORY LOCK has no normal-speed safe first/blind route. No answer was displayed.");

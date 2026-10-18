@@ -14,6 +14,13 @@ namespace RewindRampage
         private bool tutorialSpawned;
         private int nextSpawnId;
         private bool firstVolatileSpawned;
+        private float telegraphGlow = 1f;
+        public void SetTelegraphGlow(float multiplier)
+        {
+            if (Mathf.Approximately(telegraphGlow, multiplier)) return;
+            telegraphGlow = multiplier;
+            foreach (var enemy in enemies) if (enemy.IsAlive) enemy.SetTelegraphGlow(multiplier);
+        }
 
         public IReadOnlyList<EnemyController> Enemies => enemies;
         public event System.Action<EnemyController> EnemyCreated;
@@ -58,6 +65,7 @@ namespace RewindRampage
 
         public void ResetEnemies()
         {
+            telegraphGlow = 1f;
             for (int i = 0; i < enemies.Count; i++) enemies[i].Despawn();
             spawnTimer = 2f;
             tutorialSpawned = false;
@@ -122,6 +130,21 @@ namespace RewindRampage
 
         public EnemyController SpawnTracker(Vector2 target) => Spawn(ChooseEdgePosition(target), tuning.enemySpeed, tuning.spawnWarningDuration);
         public EnemyController SpawnTracker(Vector2 target, float speed, float warning) => Spawn(ChooseEdgePosition(target), speed, warning);
+        public EnemyController SpawnBossBatchMember(Vector2 currentPlayer)
+        {
+            Vector2 position = ChooseEdgePosition(currentPlayer);
+            float clearance = tuning.playerRadius + tuning.enemyRadius + 0.5f;
+            if ((position - currentPlayer).sqrMagnitude < clearance * clearance)
+            {
+                // Same legal perimeter, deterministic far corner if the random retry budget
+                // landed too near the operator. Never reduce a batch to satisfy spawn safety.
+                Vector2 edge = tuning.arenaHalfSize - Vector2.one * Mathf.Max(0.55f, tuning.enemyRadius);
+                position = new Vector2(currentPlayer.x >= 0f ? -edge.x : edge.x, currentPlayer.y >= 0f ? -edge.y : edge.y);
+                if ((position - currentPlayer).sqrMagnitude < clearance * clearance)
+                    throw new System.InvalidOperationException("Arena has no safe Boss follower perimeter spawn.");
+            }
+            return Spawn(position, tuning.enemySpeed, tuning.spawnWarningDuration);
+        }
 
         public void TickTrackers(float deltaTime, Vector2 target)
         { foreach (EnemyController enemy in enemies) if (enemy.IsAlive) enemy.Tick(deltaTime, target); }
@@ -132,10 +155,12 @@ namespace RewindRampage
             {
                 if (enemies[i].IsAlive) continue;
                 enemies[i].Spawn(++nextSpawnId, tuning.ClampToArena(position, tuning.enemyRadius), speed, warning, isVolatile);
+                enemies[i].SetTelegraphGlow(telegraphGlow);
                 return enemies[i];
             }
             EnemyController added = CreateEnemy();
             added.Spawn(++nextSpawnId, tuning.ClampToArena(position, tuning.enemyRadius), speed, warning, isVolatile);
+            added.SetTelegraphGlow(telegraphGlow);
             return added;
         }
 
