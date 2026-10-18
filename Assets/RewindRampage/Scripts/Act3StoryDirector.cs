@@ -144,7 +144,7 @@ namespace RewindRampage
         public void CoreDestroyed()
         {
             if (coreShown) return;
-            coreShown = true; waveRemaining = 0.8f;
+            coreShown = true; waveRemaining = 0f;
             hud.ShowStoryMessage("> TEMPORAL CORE DESTROYED.\n> PURGE COMMAND DISABLED.\n> ARCHIVE CYCLE STILL ACTIVE.", 4.5f);
             hud.ShowBurst("SURVIVE UNTIL 00:00.", "PURGE COMMAND DISABLED / THE CYCLE CONTINUES.", Color.white, 3f, true);
         }

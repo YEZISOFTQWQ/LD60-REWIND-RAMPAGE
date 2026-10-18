@@ -176,7 +176,7 @@ namespace RewindRampage
             switch (game.State)
             {
                 case SessionState.Title:
-                    view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v0.8.6";
+                    view.menuTag.text = "TAPE 004 / OLD TECH / DEMO v" + Application.version;
                     view.menuTitle.text = "REWIND\n<color=#FFC242>RAMPAGE</color>";
                     view.menuLead.text = "YOUR PAST IS YOUR WEAPON.";
                     view.menuInstructions.text = TitleInstructions;
@@ -359,7 +359,7 @@ namespace RewindRampage
             string hint = game.InArchive ? rewinding ? "ECHOES FROZEN / THE ARCHIVE CLOCK IS STILL RUNNING." : game.Archive.Core.IsDestroyed
                 ? "CORE ERASED / KEEP DODGING. SURVIVE UNTIL 00:00." : game.Archive.Core.State == TimeCoreState.Dormant
                 ? "DODGE LOCKED RED PATHS. THE TIME CORE APPEARS AT 00:30."
-                : "THREE DISTINCT REWINDS TO BREAK THE CORE. THEN SURVIVE UNTIL 00:00."
+                : "TWO DISTINCT REWINDS TO BREAK THE CORE. THEN SURVIVE UNTIL 00:00."
                 : game.InDuel ? rewinding ? "PAST SELF FROZEN / ONE PARADOX HIT PER REWIND." :
                 "ERASE YOUR PAST / RED SHOTS AIM AT THE REPLAY. DODGE THEIR FIXED PATHS."
                 : rewinding ? "REWIND / ENEMIES FROZEN. YOU ARE INVULNERABLE." : game.Elapsed < 5f
@@ -421,7 +421,8 @@ namespace RewindRampage
 
         private void TickTimer(bool reconstructing, float deltaTime)
         {
-            view.arenaClock.SetCameraCompensation(game.InEndless && game.Endless.BossStarted ? game.CameraShakeOffset : Vector2.zero);
+            view.arenaClock.SetCameraCompensation(game.ClockCameraOffset);
+            view.arenaClock.SetPresentationScale(game.ClockCameraScale);
             bool act1Clock = (!game.InDuel && !game.InArchive) || (reconstructing && game.Duel.TransitionElapsed < 6f);
             float time = game.InArchive ? game.Act3Story.ClockTime : game.InDuel ? game.Duel.DuelTime : game.Elapsed;
             if (game.InEndless) time = Mathf.Abs(game.Endless.PhasePlayhead);
@@ -452,7 +453,7 @@ namespace RewindRampage
             if (game.InArchive) transitionOpacity *= game.Act3Story.ClockOpacity;
             if (game.InEndless && game.Endless.BossStarted)
                 view.arenaClock.DisplayBossRta(game.Endless.Boss.Rta, clockVisibility, reverse, game.Endless.Boss.PhaseId, game.Endless.Boss.PhaseCaption);
-            else view.arenaClock.Display(time, alarm, milliseconds, clockVisibility * transitionOpacity, pulse);
+            else view.arenaClock.Display(time, alarm, milliseconds, clockVisibility * transitionOpacity * (game.CoreSequence?.HudOpacity ?? 1f), pulse);
         }
 
         private void TickRewindPresentation(float deltaTime, bool reversing)
@@ -481,6 +482,12 @@ namespace RewindRampage
 
         private void TickDuelPresentation()
         {
+            if (game.CinematicFreeze)
+            {
+                view.duelOverlay.SetActive(true); view.duelTitle.text = view.duelDetail.text = view.duelTapeTime.text = "";
+                view.duelBackdrop.color = new Color(0.008f, 0.008f, 0.02f, game.CoreSequence.Darkness);
+                view.trackingBar.gameObject.SetActive(false); view.scanlines.color = Color.clear; return;
+            }
             bool archiveVisible = game.InArchive && game.State == SessionState.Playing && game.Act3Story.IsCinematic;
             bool ending = game.InDuel && game.Act2Story.IsEnding;
             bool visible = game.InDuel && game.State == SessionState.Playing && (game.Duel.IsTransition || ending);

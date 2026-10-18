@@ -43,14 +43,16 @@ namespace RewindRampage
         public readonly int Combo;
         public readonly DamageSource Source;
         public readonly int ChainKills;
+        public readonly long EventId;
 
-        public RewindKill(Vector2 position, int reward, int combo, DamageSource source, int chainKills)
+        public RewindKill(Vector2 position, int reward, int combo, DamageSource source, int chainKills, long eventId = 0)
         {
             Position = position;
             Reward = reward;
             Combo = combo;
             Source = source;
             ChainKills = chainKills;
+            EventId = eventId;
         }
     }
 

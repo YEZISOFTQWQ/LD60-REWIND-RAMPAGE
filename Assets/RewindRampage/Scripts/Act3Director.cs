@@ -108,6 +108,7 @@ namespace RewindRampage
             Core.TickVisual(deltaTime);
         }
         public void Stop() { IsRunning = false; spawns.Stop(); }
+        public void BeginCoreDestructionSequence() { coreStun = 0f; }
         public void SetStoryPresentation(float opacity, float offset) { spawns.SetStoryPresentation(opacity, offset); }
         public void Reset() { Stop(); Core.Reset(); Remaining = Duration; Phase = EchoKills = 0; coreStun = 0f; HostileRewindDetected = false; }
         public void Dispose() { spawns.Dispose(); }

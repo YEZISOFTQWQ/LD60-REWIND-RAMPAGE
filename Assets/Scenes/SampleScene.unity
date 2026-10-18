@@ -11232,6 +11232,22 @@ MonoBehaviour:
   settlementMusic: {fileID: 8300000, guid: d384cb4927bd53e4bbac34d082354c6c, type: 3}
   menuMusic: {fileID: 8300000, guid: 06503abad8b51d545bf46e56e7576c3d, type: 3}
   musicVolume: 0.55
+  impactSettings:
+    quality: 0
+    cameraShake: 0
+    enableVfx: 1
+    enableSfx: 1
+    hitFlashDuration: 0.025
+    deathShardCount: 4
+    deathShardLifetime: 0.18
+    intersectionRingLifetime: 0.2
+    killAudioAggregationWindow: 0.075
+    maxSimultaneousHitVoices: 3
+    multikillMidThreshold: 5
+    multikillLargeThreshold: 15
+    cameraShakeScale: 1
+    maxShakeAmplitudePxAt1080p: 15
+    maxShakeDuration: 0.3
 --- !u!4 &1052731010
 Transform:
   m_ObjectHideFlags: 0
@@ -15788,6 +15804,13 @@ MonoBehaviour:
   tuning: {fileID: 11400000, guid: 0a4176bc348c5a64392e2e669161cb61, type: 2}
   art: {fileID: 11400000, guid: 5a577fdc7baede542856337a3ad785a9, type: 2}
   endlessSettings: {fileID: 11400000, guid: fb045673d3b91844b8c9ab4b5c46c4fa, type: 2}
+  coreCinematicSettings:
+    bigHitStopSeconds: 0.23
+    zoomInSeconds: 0.37
+    zoomFactor: 1.7
+    explosionShowSeconds: 0.47
+    zoomOutSeconds: 0.59
+    cinematicShakePxAt1080p: 12
   player: {fileID: 2013323454}
   spawner: {fileID: 1109645982}
   feedback: {fileID: 1052731009}
@@ -18243,7 +18266,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: TAPE 004 / OLD TECH / DEMO v0.9.1
+  m_text: TAPE 004 / OLD TECH / DEMO v0.9.2
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 31c00f26a680b7f47b28bb3c7b3c1c09, type: 2}
   m_sharedMaterial: {fileID: 8350918981624038913, guid: 31c00f26a680b7f47b28bb3c7b3c1c09, type: 2}

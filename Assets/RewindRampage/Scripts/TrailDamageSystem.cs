@@ -12,6 +12,7 @@ namespace RewindRampage
         private readonly HashSet<int> hitEnemyIds = new HashSet<int>();
         private readonly ExplosionResolver explosions;
         private bool attackActive;
+        private long nextFeedbackId;
         private GhostBossHealth ghostBoss;
         private Act3Director archive;
 
@@ -91,7 +92,7 @@ namespace RewindRampage
             if (context.Source == DamageSource.FieldMechanic)
             {
                 // Reuse the ordinary base kill reward, without changing the current rewind combo.
-                onKill(new RewindKill(enemy.Position, 100, 1, DamageSource.FieldMechanic, 0));
+                onKill(new RewindKill(enemy.Position, 100, 1, DamageSource.FieldMechanic, 0, ++nextFeedbackId));
                 return;
             }
             if (!attackActive || context.RewindId != RewindId) return;
@@ -127,7 +128,7 @@ namespace RewindRampage
             int reward = 100 + (KillCount - 1) * 50;
             Score += reward;
             int chainKills = source == DamageSource.VolatileExplosion ? explosions.RegisterChainKill(chainId) : 0;
-            onKill(new RewindKill(position, reward, KillCount, source, chainKills));
+            onKill(new RewindKill(position, reward, KillCount, source, chainKills, ++nextFeedbackId));
         }
 
         public void ResolveExplosions()

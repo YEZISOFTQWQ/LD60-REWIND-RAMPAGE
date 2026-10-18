@@ -16,10 +16,11 @@ namespace RewindRampage
         private readonly SpriteRenderer[] integrity = new SpriteRenderer[MaximumHealth];
         private readonly HashSet<int> damagingActions = new HashSet<int>();
         private float visualTime, breakFade, birth;
+        private bool cinematicHold;
         public TimeCoreState State { get; private set; }
         public int Health { get; private set; }
         public bool IsDestroyed => State == TimeCoreState.Destroyed;
-        public Vector2 Position => Vector2.zero;
+        public Vector2 Position => root.position;
 
         public TimeCoreController(GameTuning tuning, GameArt art, Transform parent, Action<bool> onHit)
         {
@@ -38,6 +39,9 @@ namespace RewindRampage
         public void Reset()
         {
             State = TimeCoreState.Dormant; Health = MaximumHealth;
+            cinematicHold = false;
+            body.color = GameArt.Red;
+            for (int i = 0; i < integrity.Length; i++) integrity[i].color = i == 1 ? GameArt.Red : GameArt.White;
             damagingActions.Clear(); visualTime = breakFade = birth = 0f;
             root.localScale = Vector3.one;
             root.gameObject.SetActive(false);
@@ -63,6 +67,7 @@ namespace RewindRampage
 
         public void TickVisual(float deltaTime)
         {
+            if (cinematicHold) return;
             if (State == TimeCoreState.Dormant) return;
             if (State == TimeCoreState.Active) visualTime += deltaTime;
             birth = Mathf.Min(1f, birth + deltaTime * 2f);
@@ -84,5 +89,22 @@ namespace RewindRampage
                 if (breakFade <= 0f) root.gameObject.SetActive(false);
             }
         }
+
+        public void HoldForDestruction()
+        {
+            cinematicHold = true; root.gameObject.SetActive(true); body.enabled = true;
+            body.color = Color.white; root.localScale = Vector3.one;
+            foreach (SpriteRenderer layer in integrity) layer.enabled = true;
+        }
+        public void PresentDestruction(float charge)
+        {
+            if (!cinematicHold) return;
+            body.color = Color.Lerp(GameArt.Red, Color.white, 0.65f + 0.35f * Mathf.Sin(charge * 60f));
+            root.localScale = Vector3.one * (1f + 0.08f * charge);
+            for (int i = 0; i < integrity.Length; i++)
+            { integrity[i].color = Color.Lerp(GameArt.Red, Color.white, charge); integrity[i].transform.localRotation = Quaternion.Euler(0f, 0f, charge * (i % 2 == 0 ? 90f : -90f)); }
+        }
+        public void CompleteDestruction()
+        { cinematicHold = false; breakFade = 0f; if (body != null) body.enabled = false; if (root != null) root.gameObject.SetActive(false); }
     }
 }

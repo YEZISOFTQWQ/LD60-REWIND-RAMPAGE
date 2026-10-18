@@ -102,7 +102,9 @@ namespace RewindRampage
             impact.enabled = pose.ImpactAge >= 0f && pose.ImpactAge < 0.45f;
             if (impact.enabled)
             {
-                float p = pose.ImpactAge / 0.45f; rim.a = (1f - p) * settings.bossImpactFlashScale;
+                float p = pose.ImpactAge / 0.45f;
+                rim = reversing ? EndlessVisuals.RewindColor : new Color(0.78f, 0.85f, 0.86f);
+                rim.a = (1f - p) * settings.bossImpactFlashScale;
                 impact.startColor = impact.endColor = rim;
                 for (int i = 0; i < 65; i++) { float a = i / 64f * Mathf.PI * 2f;
                     impact.SetPosition(i, (Vector3)pose.Ground + new Vector3(Mathf.Cos(a) * (5f + p * 2f), Mathf.Sin(a) * (0.6f + p * 1.1f) - 2.4f)); }

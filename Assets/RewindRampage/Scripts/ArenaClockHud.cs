@@ -24,10 +24,16 @@ namespace RewindRampage
         private Mesh runtimeMesh;
         private Color32[] colors;
         private readonly int[] values = new int[7];
-        private TextMeshPro bossCaption;
         private Vector2 cameraCompensation;
         private float glitchOffset;
         private float bossCenter = float.NaN;
+        private Vector3 authoredScale;
+        private bool capturedScale;
+        public void SetPresentationScale(float scale)
+        {
+            if (!capturedScale) { authoredScale = transform.localScale; capturedScale = true; }
+            transform.localScale = authoredScale * scale;
+        }
         public float DisplayedTime { get; private set; }
         public bool DisplaysBossRta { get; private set; }
         public Mesh Author(GameArt art, Material material, bool archive)
@@ -135,7 +141,6 @@ namespace RewindRampage
         {
             DisplaysBossRta = false;
             geometry.GetComponent<MeshRenderer>().sortingOrder = -15;
-            if (bossCaption != null) bossCaption.gameObject.SetActive(false);
             DisplayInternal(time, redMix, milliseconds, visibility, pulse, false);
         }
 
@@ -143,16 +148,6 @@ namespace RewindRampage
         {
             DisplaysBossRta = true;
             geometry.GetComponent<MeshRenderer>().sortingOrder = -1;
-            if (bossCaption == null)
-            {
-                bossCaption = new GameObject("Boss RTA caption", typeof(TextMeshPro)).GetComponent<TextMeshPro>();
-                bossCaption.transform.SetParent(transform, false); bossCaption.transform.localPosition = new Vector3(0f, 3.15f);
-                bossCaption.font = units[0].font; bossCaption.fontSize = 3f; bossCaption.alignment = TextAlignmentOptions.Center;
-                bossCaption.enableWordWrapping = false; bossCaption.rectTransform.sizeDelta = new Vector2(22f, 1.8f);
-                bossCaption.GetComponent<MeshRenderer>().sortingOrder = 0;
-            }
-            bossCaption.gameObject.SetActive(true); bossCaption.text = "P" + phase + " / " + phaseCaption + (reverse ? "\nRTA  << REW" : "\nRTA");
-            bossCaption.color = new Color(0.54f, 0.91f, 1f, visibility * 0.65f);
             DisplayInternal(time, 0f, 1f, visibility, 1f, true);
         }
 

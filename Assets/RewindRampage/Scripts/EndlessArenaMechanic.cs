@@ -231,8 +231,8 @@ namespace RewindRampage
             if (!Visible) return;
             bool warningState = time < AttackAt;
             float progress = Mathf.InverseLerp(start, AttackAt, time);
-            Color warningColor = Color.Lerp(GameArt.Gold, GameArt.Red, progress * 0.65f);
-            Color color = Color.Lerp(warningState ? warningColor : GameArt.Red, EndlessVisuals.RewindColor, rewindTint);
+            Color warningColor = HazardVisualLanguage.Warning(progress, time);
+            Color color = Color.Lerp(warningState ? warningColor : HazardVisualLanguage.Active(time - AttackAt), HazardVisualLanguage.Reverse(time), rewindTint);
             if (boss != null && kind == EndlessMechanicKind.TrackLock && time >= LockAt)
                 color = reversing ? EndlessVisuals.RewindColor : GameArt.Red;
             color.a = warningState ? 0.7f + 0.3f * Mathf.Abs(Mathf.Sin(time * 9f)) : 1f;
@@ -251,6 +251,7 @@ namespace RewindRampage
             }
             if (kind == EndlessMechanicKind.TrackLock)
             {
+                if (!reversing && time >= LockAt && time < LockAt + 0.12f) color = HazardVisualLanguage.Highlight;
                 if (time > AttackAt + 0.45f) { color.a = 0.22f; fill = 0.02f; }
                 else if (!warningState) color = Color.Lerp(Color.white, color, Mathf.Clamp01((time - AttackAt) / 0.18f));
                 if (boss != null && time >= LockAt && time < LockAt + 0.18f) color = reversing ? EndlessVisuals.RewindColor : Color.white;

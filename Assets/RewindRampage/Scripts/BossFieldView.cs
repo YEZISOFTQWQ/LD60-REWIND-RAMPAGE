@@ -55,9 +55,14 @@ namespace RewindRampage
             root.gameObject.SetActive(visible); if (!visible) return;
             foreach (EndlessAreaView view in views) view.Hide();
             arrow.enabled = link.enabled = gapPath.enabled = false; state.gameObject.SetActive(false);
-            Color red = reverse ? EndlessVisuals.RewindColor : GameArt.Red;
-            Color amber = reverse ? EndlessVisuals.RewindColor : GameArt.Gold;
             bool warning = time < attack; float progress = Mathf.InverseLerp(birth, attack, time);
+            Color red = reverse ? HazardVisualLanguage.Reverse(time) : HazardVisualLanguage.Active(time - attack);
+            Color amber = reverse ? HazardVisualLanguage.Reverse(time) : HazardVisualLanguage.Warning(progress, time);
+            if (suppressTelegraph)
+            {
+                foreach (TextMeshPro label in labels) label.gameObject.SetActive(false);
+                if (reverse || warning) return;
+            }
             if (kind == EndlessMechanicKind.TrackLock)
             {
                 bool follow = time < birth + p.FollowSeconds;
@@ -71,6 +76,7 @@ namespace RewindRampage
                 DrawArrow(target + escape * (p.Radius + 0.35f), escape, warning ? amber : red);
                 state.gameObject.SetActive(warning); state.transform.position = target + Vector2.up * (p.Radius + 0.5f);
                 state.text = follow ? "LOCKING" : "LOCKED"; state.color = color;
+                if (suppressTelegraph) { arrow.enabled = link.enabled = false; state.gameObject.SetActive(false); if (time >= end) views[0].Hide(); }
             }
             else if (kind == EndlessMechanicKind.HeadSweep)
             {
@@ -95,6 +101,7 @@ namespace RewindRampage
                 float sign = (p.RightToLeft ? -1f : 1f) * (reverse ? -1f : 1f);
                 DrawArrow(new Vector2(Mathf.Clamp(x, -half.x + 2f, half.x - 2f), y), Vector2.right * sign, color);
                 link.enabled = warning; link.SetPosition(0, p.Emitter); link.SetPosition(1, new Vector2(x, -half.y)); link.startColor = link.endColor = amber;
+                if (suppressTelegraph) { arrow.enabled = link.enabled = gapPath.enabled = false; views[4].Hide(); }
             }
             else if (kind == EndlessMechanicKind.BadSectors)
             {
@@ -107,8 +114,8 @@ namespace RewindRampage
                     labels[cell].gameObject.SetActive(!suppressTelegraph);
                     if (suppressTelegraph && (!active || reverse)) continue;
                     if (active && !reverse) VisibleExplosions++; else if (!done) VisibleWarnings++;
-                    bool future = wave > currentWave; Color color = done ? new Color(0.22f, 0.36f, 0.4f, 0.35f) : active ? red : future ? amber : Color.Lerp(amber, red, 0.65f);
-                    if (reverse) color = EndlessVisuals.RewindColor;
+                    bool future = wave > currentWave; Color color = done ? new Color(0.22f, 0.36f, 0.4f, 0.35f) : active ? HazardVisualLanguage.Active(time - at) : future ? amber : Color.Lerp(amber, red, 0.65f);
+                    if (reverse) color = HazardVisualLanguage.Reverse(time);
                     if (!active && !done) color.a = future ? 0.55f : 0.85f;
                     labels[cell].color = color;
                     views[cell].Show(new MechanicArea(BossFieldGeometry.Sector(cell, half, p)), color, active ? 0.23f : done ? 0.015f : future ? 0.025f : 0.055f,
@@ -122,9 +129,11 @@ namespace RewindRampage
                 {
                     float at = attack + band * p.AdvanceInterval; bool active = time >= at && time < at + p.HoldSeconds;
                     bool future = time < at, current = band == front;
-                    Color color = active ? red : future ? amber : new Color(0.22f, 0.36f, 0.4f, 0.28f);
+                    labels[band].gameObject.SetActive(!suppressTelegraph);
+                    if (suppressTelegraph && !active) continue;
+                    Color color = active ? HazardVisualLanguage.Active(time - at) : future ? amber : new Color(0.22f, 0.36f, 0.4f, 0.28f);
                     if (active && !current) color.a = 0.65f; else if (future) color.a = current || band == front + 1 ? 0.7f : 0.25f;
-                    if (reverse) color = EndlessVisuals.RewindColor;
+                    if (reverse) color = HazardVisualLanguage.Reverse(time);
                     labels[band].color = color;
                     views[band].Show(new MechanicArea(BossFieldGeometry.Strip(band, half, p)), color,
                         active ? current ? 0.22f : 0.12f : 0.02f, reverse || future, warning && current ? progress : -1f, current ? 0.08f : 0.035f);
@@ -133,6 +142,7 @@ namespace RewindRampage
                 DrawArrow(strip.center, (p.VerticalBands ? Vector2.up : Vector2.right) * (p.RightToLeft ? -1f : 1f) * (reverse ? -1f : 1f), warning ? amber : red);
                 state.gameObject.SetActive(time < end); state.transform.position = strip.center + Vector2.up * 0.75f;
                 state.text = warning ? "OVERWRITE >" : "HOLD / " + (front + 1); state.color = warning ? amber : red;
+                if (suppressTelegraph) { arrow.enabled = false; state.gameObject.SetActive(false); }
             }
         }
         private void DrawArrow(Vector2 center, Vector2 direction, Color color)
