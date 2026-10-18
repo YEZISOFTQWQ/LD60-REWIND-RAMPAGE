@@ -28,6 +28,10 @@ sysinfo.txt
 Thumbs.db
 *.log
 
+# Local design and implementation documentation
+/Assets/RewindRampage/Documentation/
+/Assets/RewindRampage/Documentation.meta
+
 # Runtime exports are deliberately committed for GitHub Pages.
 !/docs/Build/
 !/docs/Build/**
