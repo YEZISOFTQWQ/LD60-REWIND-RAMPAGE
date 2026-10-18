@@ -2,7 +2,7 @@
 
 > **The past was never erased.**
 
-[English](README.md) | [简体中文](README_CN.md)
+[English](README.md) | [简体中文](README_CN.md) |  [Release](https://github.com/YEZISOFTQWQ/LD60-REWIND-RAMPAGE/releases)
 
 **REWIND RAMPAGE** 是一款为 **Ludum Dare 60（Compo）** 制作的快节奏霓虹风格 2D 动作游戏，灵感来自本届主题 **Old Tech（旧科技）**。
 

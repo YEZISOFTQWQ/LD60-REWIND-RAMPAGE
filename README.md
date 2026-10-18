@@ -2,7 +2,7 @@
 
 > **The past was never erased.**
 
-[English](README.md) | [简体中文](README_CN.md)
+[English](README.md) | [简体中文](README_CN.md) | [Release](https://github.com/YEZISOFTQWQ/LD60-REWIND-RAMPAGE/releases)
 
 **REWIND RAMPAGE** is a fast-paced, neon-styled 2D action game created for **Ludum Dare 60 (Compo)**, inspired by the theme **Old Tech**.
 
